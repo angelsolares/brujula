@@ -167,6 +167,30 @@ def fetch_one(db, sql: str, params=()) -> dict | None:
     return row_to_dict(cursor, cursor.fetchone())
 
 
+ACHIEVEMENT_CATALOG = [
+    ("first-steps", "Primeros pasos", "Escribe tu propósito y define tu primera meta.", "🧭"),
+    ("network-10", "Red en marcha", "Registra 10 personas en tu red.", "🌐"),
+    ("connector", "Gran conexión", "Registra 25 conversaciones significativas.", "🤝"),
+    ("streak-7", "Racha imparable", "Trabaja tu plan durante siete días seguidos.", "🔥"),
+    ("mentor", "Mentoría en camino", "Acompaña a tu primer asociado.", "🏅"),
+    ("first-sale", "Primera venta", "Registra tu primera venta del mes.", "💫"),
+    ("level-5", "Nivel 5 alcanzado", "Acumula 1,000 XP de experiencia.", "⭐"),
+]
+
+
+def sync_achievement_catalog(db) -> None:
+    """Agrega logros nuevos y actualiza sus textos sin tocar los ya desbloqueados."""
+    for slug, title, description, icon in ACHIEVEMENT_CATALOG:
+        db.execute(
+            "INSERT OR IGNORE INTO achievements (slug,title,description,icon,unlocked_at) VALUES (?,?,?,?,NULL)",
+            (slug, title, description, icon),
+        )
+        db.execute(
+            "UPDATE achievements SET title=?, description=?, icon=? WHERE slug=?",
+            (title, description, icon, slug),
+        )
+
+
 def ensure_column(db, table: str, column: str, definition: str) -> None:
     try:
         existing = {row[1] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
@@ -186,6 +210,7 @@ def initialize_database() -> None:
         ensure_column(db, "users", "email", "TEXT NOT NULL DEFAULT ''")
         ensure_column(db, "users", "phone", "TEXT NOT NULL DEFAULT ''")
         ensure_column(db, "users", "city", "TEXT NOT NULL DEFAULT ''")
+        sync_achievement_catalog(db)
         if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
             return
 
@@ -253,18 +278,6 @@ def initialize_database() -> None:
                 ("Contactos esta semana", 17, 25, "contactos", "#ef5f86"),
                 ("Ventas del mes", 24700, 35000, "MXN", "#f2a93b"),
                 ("Sesiones de conocimiento", 3, 4, "sesiones", "#2878d0"),
-            ],
-        )
-        db.executemany(
-            "INSERT INTO achievements (slug,title,description,icon,unlocked_at) VALUES (?,?,?,?,?)",
-            [
-                ("first-steps", "Primeros pasos", "Escribe tu propósito y define tu primera meta.", "🧭", None),
-                ("network-10", "Red en marcha", "Registra 10 personas en tu red.", "🌐", None),
-                ("connector", "Gran conexión", "Registra 25 conversaciones significativas.", "🤝", None),
-                ("streak-7", "Racha imparable", "Trabaja tu plan durante siete días seguidos.", "🔥", None),
-                ("mentor", "Mentoría en camino", "Acompaña a tu primer asociado.", "🏅", None),
-                ("first-sale", "Primera venta", "Registra tu primera venta del mes.", "💫", None),
-                ("level-5", "Nivel 5 alcanzado", "Acumula 1,000 XP de experiencia.", "⭐", None),
             ],
         )
         db.executemany(
