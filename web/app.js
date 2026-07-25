@@ -1,14 +1,30 @@
-const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", search: "" };
+const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", search: "", editingContactId: null, editingTaskId: null };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const money = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 const shortDate = (value) => value ? new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" }).format(new Date(`${value}T12:00:00`)) : "Sin fecha";
+// "en-CA" entrega YYYY-MM-DD en horario local; toISOString usaría UTC y podría adelantar un día.
+const isoDate = (date = new Date()) => date.toLocaleDateString("en-CA");
+const isoPlusDays = (days) => { const date = new Date(); date.setDate(date.getDate() + days); return isoDate(date); };
+const headerDate = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" }).formatToParts(date);
+  const find = (type) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${find("weekday")} · ${find("day")} ${find("month")}`.toUpperCase();
+};
+const compactDate = (date = new Date()) => new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" }).format(date).replace(".", "").toUpperCase();
 const initials = (name) => name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
 const percent = (current, target) => Math.min(100, Math.round((Number(current) / Math.max(1, Number(target))) * 100));
 
 const profileIcons = { leadership: "♢", connection: "♡", constancy: "✓", analyst: "⌕", executor: "⚡" };
+const profileMeta = {
+  Liderazgo: { icon: "/assets/icon-leadership.png", hint: "Inspirar y desarrollar personas", focus: "Tu liderazgo se potencia cuando cada conversación termina con un siguiente paso claro." },
+  Conexión: { icon: "/assets/icon-connection.png", hint: "Crear confianza y cercanía", focus: "Tu conexión se potencia cuando escuchas la meta de la otra persona antes de proponer." },
+  Analista: { icon: "/assets/icon-analyst.png", hint: "Entender a fondo y explicar", focus: "Tu perfil analista brilla cuando respaldas cada recomendación con un dato claro." },
+  Ejecutor: { icon: "/assets/icon-executor.png", hint: "Convertir ideas en acción", focus: "Tu perfil ejecutor avanza cuando conviertes cada idea en una acción con fecha." },
+  Constancia: { icon: "/assets/icon-connection.png", hint: "Sostener el ritmo día a día", focus: "Tu constancia se nota cuando revisas tu plan a la misma hora todos los días." },
+};
 const categoryIcons = { Llamada: "☎", Contenido: "▶", Mentoría: "♢", Redes: "◎", Capacitación: "⌕", Organización: "✓" };
 const typeColors = { Prospecto: "#7755c7", Cliente: "#ed5f86", Asociado: "#2878d0" };
 const visualVariants = {
@@ -16,8 +32,14 @@ const visualVariants = {
   male: { hero: "/assets/mission-trail-male.png", profile: "/assets/profile-result-male.png", label: "avatar masculino" },
   neutral: { hero: "/assets/mission-trail-neutral.png", profile: "/assets/profile-result-neutral.png", label: "ilustración neutral sin avatar" },
 };
+const greeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Buenos días";
+  if (hour < 19) return "Buenas tardes";
+  return "Buenas noches";
+};
 const viewTitles = {
-  dashboard: "¡Buenos días, Mariana!",
+  dashboard: "Bienvenida a BRÚJULA",
   contacts: "Tu red, en un solo lugar",
   agenda: "Hoy es un buen día para avanzar",
   map: "Tu meta está cada vez más cerca",
@@ -112,7 +134,11 @@ function taskTemplate(task, timeline = false) {
       <time class="timeline-time">${escapeHtml(task.due_time || "Hoy")}</time>
       <span class="timeline-dot"></span>
       <div class="timeline-copy"><strong>${escapeHtml(task.title)}</strong><p>${escapeHtml(task.detail)}</p><span>${escapeHtml(task.profile_tag)} · +${task.points} XP</span></div>
-      <input class="mission-check" type="checkbox" aria-label="Completar ${escapeHtml(task.title)}" ${task.completed ? "checked" : ""}>
+      <div class="timeline-actions">
+        <button class="row-action" data-edit-task="${task.id}" title="Editar misión" aria-label="Editar ${escapeHtml(task.title)}">✎</button>
+        <button class="row-action danger" data-delete-task="${task.id}" title="Eliminar misión" aria-label="Eliminar ${escapeHtml(task.title)}">🗑</button>
+        <input class="mission-check" type="checkbox" aria-label="Completar ${escapeHtml(task.title)}" ${task.completed ? "checked" : ""}>
+      </div>
     </div>`;
   }
   return `<div class="mission-item ${task.completed ? "completed" : ""}" data-task-id="${task.id}">
@@ -125,12 +151,44 @@ function taskTemplate(task, timeline = false) {
 
 function renderTasks(tasks) {
   const completed = tasks.filter((task) => task.completed).length;
-  $("#dashboardTasks").innerHTML = tasks.slice(0, 4).map((task) => taskTemplate(task)).join("");
-  $("#agendaTasks").innerHTML = tasks.map((task) => taskTemplate(task, true)).join("");
+  $("#dashboardTasks").innerHTML = tasks.length
+    ? tasks.slice(0, 4).map((task) => taskTemplate(task)).join("")
+    : `<p class="empty-state">Aún no hay misiones para hoy. Crea una desde la agenda.</p>`;
+  $("#agendaTasks").innerHTML = tasks.length
+    ? tasks.map((task) => taskTemplate(task, true)).join("")
+    : `<p class="empty-state">Tu día está libre. Agrega tu primera misión con el botón “Nueva misión”.</p>`;
   $("#taskRing").textContent = `${completed}/${tasks.length}`;
   $("#agendaProgress").textContent = `${completed} de ${tasks.length} listas`;
   $("#agendaPoints").textContent = `${tasks.filter((task) => !task.completed).reduce((sum, task) => sum + task.points, 0)} XP`;
   $$(".mission-check").forEach((checkbox) => checkbox.addEventListener("change", toggleTask));
+  $$("[data-edit-task]").forEach((button) => button.addEventListener("click", () => openTaskDialog(Number(button.dataset.editTask))));
+  $$("[data-delete-task]").forEach((button) => button.addEventListener("click", () => deleteTask(Number(button.dataset.deleteTask))));
+}
+
+function celebrate(unlocked = []) {
+  unlocked.forEach((achievement, index) => {
+    setTimeout(() => toast(`${achievement.icon} ¡Logro desbloqueado: ${achievement.title}!`), index * 900);
+  });
+}
+
+function renderAchievements(achievements = []) {
+  const unlocked = achievements.filter((item) => item.unlocked_at);
+  $("#achievementCount").textContent = `${unlocked.length} de ${achievements.length}`;
+  $("#achievementStrip").innerHTML = achievements.map((item) => `
+    <article class="achievement-card ${item.unlocked_at ? "unlocked" : "locked"}">
+      <span class="achievement-icon">${item.unlocked_at ? item.icon : "🔒"}</span>
+      <div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.description)}</p></div>
+      <small>${item.unlocked_at ? shortDate(item.unlocked_at) : "Pendiente"}</small>
+    </article>`).join("");
+}
+
+function renderWeek(week = []) {
+  const done = week.filter((day) => day.done).length;
+  $("#weeklyStreak").textContent = `${done}/7`;
+  $("#weekDots").innerHTML = week.map((day) => {
+    const classes = [day.done ? "done" : "", day.future ? "future" : "", day.date === isoDate() ? "current" : ""].filter(Boolean).join(" ");
+    return `<i class="${classes}" title="${day.date}">${day.label}</i>`;
+  }).join("");
 }
 
 async function toggleTask(event) {
@@ -140,11 +198,60 @@ async function toggleTask(event) {
   try {
     const result = await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ completed }) });
     toast(completed ? `¡Misión completada! Nivel ${result.level}` : "Misión reabierta");
+    celebrate(result.new_achievements);
     await loadDashboard();
   } catch (error) {
     event.target.checked = !completed;
     toast(error.message);
   }
+}
+
+async function deleteTask(taskId) {
+  const task = (state.dashboard?.tasks || []).find((item) => item.id === taskId);
+  if (!confirm(`¿Eliminar la misión “${task ? task.title : ""}”? Esta acción no se puede deshacer.`)) return;
+  try {
+    const result = await api(`/api/tasks/${taskId}`, { method: "DELETE" });
+    toast(result.message);
+    await loadDashboard();
+  } catch (error) { toast(error.message); }
+}
+
+function openTaskDialog(taskId = null) {
+  const form = $("#taskForm");
+  form.reset();
+  state.editingTaskId = taskId;
+  const task = taskId ? (state.dashboard?.tasks || []).find((item) => item.id === taskId) : null;
+  $("#taskModalKicker").textContent = task ? "EDITAR MISIÓN" : "NUEVA MISIÓN";
+  $("#taskModalTitle").textContent = task ? "Ajustar esta misión" : "Agregar una misión";
+  $("#taskSubmitButton").textContent = task ? "Guardar cambios" : "Guardar misión";
+  if (task) {
+    ["title", "detail", "category", "profile_tag", "due_date", "due_time", "points"].forEach((key) => {
+      if (form.elements[key]) form.elements[key].value = task[key] ?? "";
+    });
+  } else {
+    form.elements.due_date.value = isoDate();
+    form.elements.points.value = 20;
+  }
+  $("#taskDialog").showModal();
+}
+
+async function submitTask(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  data.points = Number(data.points || 20);
+  const editing = state.editingTaskId;
+  try {
+    if (editing) {
+      await api(`/api/tasks/${editing}`, { method: "PATCH", body: JSON.stringify(data) });
+      toast("Misión actualizada");
+    } else {
+      await api("/api/tasks", { method: "POST", body: JSON.stringify(data) });
+      toast("Nueva misión en tu agenda");
+    }
+    $("#taskDialog").close();
+    state.editingTaskId = null;
+    await loadDashboard();
+  } catch (error) { toast(error.message); }
 }
 
 function personCard(contact) {
@@ -272,7 +379,7 @@ async function loadDashboard() {
     state.dashboard = data;
     const { user, contact_counts: counts, profile_scores: profiles, goals } = data;
     const firstName = user.name.trim().split(/\s+/)[0] || "Exploradora";
-    viewTitles.dashboard = `¡Buenos días, ${firstName}!`;
+    viewTitles.dashboard = `¡${greeting()}, ${firstName}!`;
     if ($("#view-dashboard").classList.contains("active")) $("#viewTitle").textContent = viewTitles.dashboard;
     $(".avatar").textContent = initials(user.name);
     $("#sideUserName").textContent = user.name;
@@ -284,24 +391,40 @@ async function loadDashboard() {
     $("#heroLevelText").textContent = `${user.level_progress} / 250 XP`;
     $("#heroLevelBar").style.width = `${percent(user.level_progress, 250)}%`;
     $("#heroStreak").textContent = user.streak;
+    $("#sideStreak").textContent = `${user.streak} ${user.streak === 1 ? "día" : "días"}`;
     $("#dominantProfile").textContent = user.dominant_profile;
-    $("#purposeText").textContent = `“${user.purpose}”`;
+    const meta = profileMeta[user.dominant_profile];
+    if (meta) {
+      $("#dominantProfileIcon").src = meta.icon;
+      $("#dominantProfileIcon").alt = `Icono del perfil ${user.dominant_profile}`;
+      $("#dominantProfileHint").textContent = meta.hint;
+      $("#profileTip").textContent = meta.focus;
+      $("#focusCardText").textContent = meta.focus;
+    }
+    $("#purposeText").textContent = user.purpose ? `“${user.purpose}”` : "Escribe tu propósito para orientar tu rumbo.";
     applyVisualVariant(user.gender);
     $("#statProspects").textContent = counts.Prospecto || 0;
     $("#statClients").textContent = counts.Cliente || 0;
     $("#statAssociates").textContent = counts.Asociado || 0;
+    const trends = data.trends || {};
+    $("#trendProspects").textContent = `+${trends.week_prospects || 0}`;
+    $("#trendClients").textContent = `+${trends.month_clients || 0}`;
+    $("#trendAssociates").textContent = `+${trends.month_associates || 0}`;
     $("#navContactCount").textContent = Object.values(counts).reduce((sum, count) => sum + count, 0);
     $("#statSales").textContent = money.format(data.sales_month);
-    const salesGoal = goals.find((goal) => goal.title.includes("Ventas"));
+    const salesGoal = goals.find((goal) => goal.unit === "MXN");
     $("#salesPercent").textContent = `${percent(data.sales_month, salesGoal?.target || 35000)}%`;
     renderProfileBars("#dashboardProfileBars", profiles);
     renderProfileBars("#largeProfileBars", profiles, true);
     renderTasks(data.tasks);
     renderGoals(goals);
     renderDevelopment(data.development);
+    renderAchievements(data.achievements);
+    renderWeek(data.week_activity);
     updateGuideWithUser(user);
     $("#attentionContacts").innerHTML = data.recent_contacts.map(personCard).join("");
     renderContactSummary(counts);
+    celebrate(data.new_achievements);
   } catch (error) {
     toast(`No pude cargar el tablero: ${error.message}`);
   }
@@ -336,12 +459,16 @@ function contactRow(contact) {
     <td><span class="stage-pill">${escapeHtml(contact.stage)}</span></td>
     <td>${escapeHtml(contact.next_action || "Definir siguiente paso")}</td>
     <td>${shortDate(contact.next_action_date)}</td>
-    <td><button class="row-action" data-advance-contact="${contact.id}" title="Avanzar etapa">→</button></td>
+    <td class="row-actions">
+      <button class="row-action" data-advance-contact="${contact.id}" title="Avanzar etapa" aria-label="Avanzar etapa de ${escapeHtml(contact.name)}">→</button>
+      <button class="row-action" data-edit-contact="${contact.id}" title="Editar" aria-label="Editar ${escapeHtml(contact.name)}">✎</button>
+      <button class="row-action danger" data-delete-contact="${contact.id}" title="Eliminar" aria-label="Eliminar ${escapeHtml(contact.name)}">🗑</button>
+    </td>
   </tr>`;
 }
 
 function mobileContactCard(contact) {
-  return `<article class="mobile-contact-card"><div class="person-top"><span class="person-avatar" style="color:${typeColors[contact.kind]};background:${typeColors[contact.kind]}16">${initials(contact.name)}</span><div><strong>${escapeHtml(contact.name)}</strong><span>${escapeHtml(contact.source)}</span></div></div><div class="mobile-contact-meta"><span class="type-pill type-${contact.kind}">${contact.kind}</span><span class="interest-pill interest-${contact.interest}">${contact.interest}</span><span class="stage-pill">${escapeHtml(contact.stage)}</span></div><p><strong>Siguiente:</strong> ${escapeHtml(contact.next_action || "Definir siguiente paso")} · ${shortDate(contact.next_action_date)}</p></article>`;
+  return `<article class="mobile-contact-card"><div class="person-top"><span class="person-avatar" style="color:${typeColors[contact.kind]};background:${typeColors[contact.kind]}16">${initials(contact.name)}</span><div><strong>${escapeHtml(contact.name)}</strong><span>${escapeHtml(contact.source)}</span></div></div><div class="mobile-contact-meta"><span class="type-pill type-${contact.kind}">${contact.kind}</span><span class="interest-pill interest-${contact.interest}">${contact.interest}</span><span class="stage-pill">${escapeHtml(contact.stage)}</span></div><p><strong>Siguiente:</strong> ${escapeHtml(contact.next_action || "Definir siguiente paso")} · ${shortDate(contact.next_action_date)}</p><div class="mobile-contact-actions"><button class="row-action" data-advance-contact="${contact.id}" title="Avanzar etapa">→</button><button class="row-action" data-edit-contact="${contact.id}" title="Editar">✎</button><button class="row-action danger" data-delete-contact="${contact.id}" title="Eliminar">🗑</button></div></article>`;
 }
 
 async function loadContacts() {
@@ -351,8 +478,10 @@ async function loadContacts() {
   try {
     state.contacts = await api(`/api/contacts?${params}`);
     $("#contactRows").innerHTML = state.contacts.length ? state.contacts.map(contactRow).join("") : `<tr><td colspan="7">No encontramos personas con esos filtros.</td></tr>`;
-    $("#mobileContactList").innerHTML = state.contacts.map(mobileContactCard).join("");
+    $("#mobileContactList").innerHTML = state.contacts.length ? state.contacts.map(mobileContactCard).join("") : `<p class="empty-state">No encontramos personas con esos filtros.</p>`;
     $$('[data-advance-contact]').forEach((button) => button.addEventListener("click", advanceContact));
+    $$('[data-edit-contact]').forEach((button) => button.addEventListener("click", () => openContactDialog(Number(button.dataset.editContact))));
+    $$('[data-delete-contact]').forEach((button) => button.addEventListener("click", () => deleteContact(Number(button.dataset.deleteContact))));
   } catch (error) { toast(error.message); }
 }
 
@@ -362,10 +491,38 @@ async function advanceContact(event) {
   const stages = ["Nuevo", "Contactado", "Presentación", "Seguimiento", "Cierre", "Recompra", "Testimonio", "Capacitación", "Activación"];
   const nextStage = stages[Math.min(stages.length - 1, Math.max(0, stages.indexOf(contact.stage)) + 1)];
   try {
-    await api(`/api/contacts/${id}`, { method: "PATCH", body: JSON.stringify({ stage: nextStage, last_contact: "2026-07-22" }) });
+    await api(`/api/contacts/${id}`, { method: "PATCH", body: JSON.stringify({ stage: nextStage, last_contact: isoDate() }) });
     toast(`${contact.name} avanzó a ${nextStage}`);
-    loadContacts();
+    await Promise.all([loadDashboard(), loadContacts()]);
   } catch (error) { toast(error.message); }
+}
+
+async function deleteContact(contactId) {
+  const contact = state.contacts.find((item) => item.id === contactId);
+  if (!confirm(`¿Eliminar a ${contact ? contact.name : "esta persona"} de tu red? Esta acción no se puede deshacer.`)) return;
+  try {
+    const result = await api(`/api/contacts/${contactId}`, { method: "DELETE" });
+    toast(result.message);
+    await Promise.all([loadDashboard(), loadContacts()]);
+  } catch (error) { toast(error.message); }
+}
+
+function openContactDialog(contactId = null) {
+  const form = $("#contactForm");
+  form.reset();
+  state.editingContactId = contactId;
+  const contact = contactId ? state.contacts.find((item) => item.id === contactId) : null;
+  $("#contactModalKicker").textContent = contact ? "ACTUALIZAR RELACIÓN" : "NUEVA RELACIÓN";
+  $("#contactModalTitle").textContent = contact ? `Editar a ${contact.name}` : "Agregar a mi red";
+  $("#contactSubmitButton").textContent = contact ? "Guardar cambios" : "Guardar contacto +25 XP";
+  if (contact) {
+    ["name", "kind", "interest", "stage", "source", "phone", "next_action_date", "health_profile", "next_action", "notes"].forEach((key) => {
+      if (form.elements[key]) form.elements[key].value = contact[key] ?? "";
+    });
+  } else {
+    form.elements.next_action_date.value = isoPlusDays(1);
+  }
+  $("#contactDialog").showModal();
 }
 
 async function loadMetrics() {
@@ -376,19 +533,26 @@ async function loadMetrics() {
     $("#salesChart").innerHTML = latest.map((item, index) => `<div class="chart-day ${index === latest.length - 1 ? "today" : ""}"><b>${money.format(item.sales)}</b><i class="chart-bar" style="--bar-height:${Math.max(8, Math.round((item.sales / maxSales) * 100))}%"></i><span>${shortDate(item.metric_date).split(" ")[0]}</span></div>`).join("");
     const totals = latest.reduce((acc, item) => ({ prospects: acc.prospects + item.new_prospects, presentations: acc.presentations + item.presentations, sales: acc.sales + item.sales }), { prospects: 0, presentations: 0, sales: 0 });
     $("#reportTotals").innerHTML = `<div class="report-total"><small>PROSPECTOS</small><strong>${totals.prospects}</strong></div><div class="report-total"><small>PRESENTACIONES</small><strong>${totals.presentations}</strong></div><div class="report-total"><small>VENTAS</small><strong>${money.format(totals.sales)}</strong></div>`;
-    const today = state.metrics.find((item) => item.metric_date === "2026-07-22");
-    if (today) Object.entries(today).forEach(([key, value]) => { const input = $(`#metricsForm [name="${key}"]`); if (input) input.value = value; });
+    const todayEntry = state.metrics.find((item) => item.metric_date === isoDate());
+    if (todayEntry) Object.entries(todayEntry).forEach(([key, value]) => { const input = $(`#metricsForm [name="${key}"]`); if (input) input.value = value; });
   } catch (error) { toast(error.message); }
 }
 
 async function submitContact(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const editing = state.editingContactId;
   try {
-    await api("/api/contacts", { method: "POST", body: JSON.stringify(data) });
+    const result = await api(editing ? `/api/contacts/${editing}` : "/api/contacts", {
+      method: editing ? "PATCH" : "POST",
+      body: JSON.stringify(data),
+    });
     $("#contactDialog").close();
-    event.currentTarget.reset();
-    toast("¡Nueva persona en tu red! +25 XP");
+    form.reset();
+    state.editingContactId = null;
+    toast(editing ? "Contacto actualizado" : "¡Nueva persona en tu red! +25 XP");
+    if (!editing) celebrate(result.new_achievements);
     await Promise.all([loadDashboard(), loadContacts()]);
   } catch (error) { toast(error.message); }
 }
@@ -397,9 +561,11 @@ async function submitMetrics(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
   ["new_prospects", "presentations", "new_clients", "new_associates", "sales"].forEach((key) => data[key] = Number(data[key] || 0));
+  data.metric_date = isoDate();
   try {
     const result = await api("/api/metrics", { method: "POST", body: JSON.stringify(data) });
     toast(result.message);
+    celebrate(result.new_achievements);
     await Promise.all([loadDashboard(), loadMetrics()]);
   } catch (error) { toast(error.message); }
 }
@@ -438,10 +604,15 @@ function bindEvents() {
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => goToView(button.dataset.view)));
   $$('[data-go-view]').forEach((button) => button.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); goToView(button.dataset.goView); }));
   $("#mobileMenu").addEventListener("click", () => $(".sidebar").classList.toggle("open"));
-  $$('[data-open-contact]').forEach((button) => button.addEventListener("click", () => $("#contactDialog").showModal()));
-  $$('[data-close-modal]').forEach((button) => button.addEventListener("click", () => $("#contactDialog").close()));
+  $$('[data-open-contact]').forEach((button) => button.addEventListener("click", () => openContactDialog()));
+  $$('[data-close-modal]').forEach((button) => button.addEventListener("click", () => { state.editingContactId = null; $("#contactDialog").close(); }));
   $("#contactForm").addEventListener("submit", submitContact);
   $("#metricsForm").addEventListener("submit", submitMetrics);
+  $("#openTaskDialog").addEventListener("click", () => openTaskDialog());
+  $$('[data-close-task]').forEach((button) => button.addEventListener("click", () => { state.editingTaskId = null; $("#taskDialog").close(); }));
+  $("#taskForm").addEventListener("submit", submitTask);
+  $("#openPurposeEdit").addEventListener("click", openProfileDialog);
+  $("#downloadBackup").addEventListener("click", () => { window.location.href = "/api/export"; toast("Preparando tu respaldo…"); });
   $("#openQuiz").addEventListener("click", () => $("#quizDialog").showModal());
   $$('[data-close-quiz]').forEach((button) => button.addEventListener("click", () => $("#quizDialog").close()));
   $("#quizForm").addEventListener("submit", submitQuiz);
@@ -472,13 +643,32 @@ function bindEvents() {
   });
 }
 
+function applyTodayLabels() {
+  const now = new Date();
+  $("#todayLabel").textContent = headerDate(now);
+  $("#agendaDayLabel").textContent = headerDate(now).split(" · ")[0];
+  $("#metricDateLabel").textContent = compactDate(now);
+}
+
+async function showStorageMode() {
+  try {
+    const health = await api("/api/health");
+    const label = health.database === "turso" ? "una base de datos en la nube (Turso)" : "el archivo local data/brujula.db";
+    $("#faqStorageMode").textContent = label;
+    $("#profilePrivacyNote").textContent = health.database === "turso"
+      ? "🔒 Tus datos se guardan en la base en la nube de esta aplicación."
+      : "🔒 Tus datos se guardan únicamente en este equipo.";
+  } catch { /* El modo de almacenamiento es informativo. */ }
+}
+
 async function init() {
   buildQuiz();
   bindEvents();
+  applyTodayLabels();
   restoreGuideChecklist();
   const initialView = location.hash.replace("#", "");
   if (viewTitles[initialView]) goToView(initialView);
-  await Promise.all([loadDashboard(), loadMetrics()]);
+  await Promise.all([loadDashboard(), loadMetrics(), showStorageMode()]);
 }
 
 init();

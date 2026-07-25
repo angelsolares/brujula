@@ -8,7 +8,7 @@ import json
 import mimetypes
 import os
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,6 +20,8 @@ DB_PATH = ROOT / "data" / "brujula.db"
 WEB_DIR = ROOT / "web"
 PUBLIC_DIR = ROOT / "public"
 
+MAX_BODY_BYTES = 1_000_000
+
 TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "").strip() or None
 TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip() or None
 USE_TURSO = bool(TURSO_DATABASE_URL)
@@ -30,6 +32,10 @@ if USE_TURSO:
 
 def today() -> str:
     return date.today().isoformat()
+
+
+def day_offset(days: int) -> str:
+    return (date.today() + timedelta(days=days)).isoformat()
 
 
 SCHEMA_STATEMENTS = [
@@ -190,9 +196,9 @@ def initialize_database() -> None:
                 "Construyo mi negocio para cuidar mi salud, alcanzar libertad financiera y ayudar a otras personas a crecer.",
                 "Liderazgo",
                 1480,
-                9,
+                0,
                 35000,
-                "2026-12-15",
+                day_offset(143),
             ),
         )
         db.executemany(
@@ -210,13 +216,13 @@ def initialize_database() -> None:
             (name,kind,interest,stage,source,phone,health_profile,estimated_objective,products,monthly_consumption,next_action,next_action_date,last_contact,birthday,notes)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             [
-                ("Ana Robles", "Prospecto", "Alto", "Presentación", "Café virtual", "656 555 0148", "Problemas de circulación; busca más energía", "Cliente / Asociada", "", 0, "Contarle una historia de éxito e invitarla a café", "2026-07-22", "2026-07-20", "1988-08-12", "No llamar durante el horario laboral."),
-                ("Pedro Sosa", "Prospecto", "Medio", "Contactado", "Referido", "656 555 0192", "Interés en rendimiento físico", "Cliente", "", 0, "Enviar video de testimonio", "2026-07-22", "2026-07-18", None, "Prefiere mensajes de WhatsApp."),
-                ("Carlos Vega", "Prospecto", "Alto", "Seguimiento", "Facebook", "656 555 0174", "Investiga antioxidantes", "Cliente", "", 0, "Enviar video científico", "2026-07-23", "2026-07-21", None, "Le interesan datos y estudios."),
-                ("Luisa Mendoza", "Cliente", "Alto", "Recompra", "En persona", "656 555 0107", "Bienestar general", "Cliente frecuente", "Immunocal Platinum", 3200, "Confirmar recompra mensual", "2026-07-24", "2026-07-16", "1979-09-03", "Compartió un testimonio positivo."),
-                ("Karina López", "Cliente", "Medio", "Testimonio", "Instagram", "656 555 0119", "Recuperación deportiva", "Referidos", "Immunocal Sport", 2100, "Solicitar testimonio y dos referidos", "2026-07-25", "2026-07-15", None, "Participa en carreras locales."),
-                ("Claudia Ruiz", "Asociado", "Alto", "Capacitación", "Evento", "656 555 0133", "", "Líder de equipo", "", 4500, "Revisar plan semanal de cinco contactos", "2026-07-22", "2026-07-19", "1985-11-28", "Perfil Conexión-Constancia."),
-                ("Luis Ortega", "Asociado", "Medio", "Activación", "Referido", "656 555 0166", "", "Productor", "", 1800, "Agendar capacitación técnica", "2026-07-26", "2026-07-12", None, "Necesita acompañamiento para crear rutina."),
+                ("Ana Robles", "Prospecto", "Alto", "Presentación", "Café virtual", "656 555 0148", "Problemas de circulación; busca más energía", "Cliente / Asociada", "", 0, "Contarle una historia de éxito e invitarla a café", day_offset(0), day_offset(-2), "1988-08-12", "No llamar durante el horario laboral."),
+                ("Pedro Sosa", "Prospecto", "Medio", "Contactado", "Referido", "656 555 0192", "Interés en rendimiento físico", "Cliente", "", 0, "Enviar video de testimonio", day_offset(0), day_offset(-4), None, "Prefiere mensajes de WhatsApp."),
+                ("Carlos Vega", "Prospecto", "Alto", "Seguimiento", "Facebook", "656 555 0174", "Investiga antioxidantes", "Cliente", "", 0, "Enviar video científico", day_offset(1), day_offset(-1), None, "Le interesan datos y estudios."),
+                ("Luisa Mendoza", "Cliente", "Alto", "Recompra", "En persona", "656 555 0107", "Bienestar general", "Cliente frecuente", "Immunocal Platinum", 3200, "Confirmar recompra mensual", day_offset(2), day_offset(-6), "1979-09-03", "Compartió un testimonio positivo."),
+                ("Karina López", "Cliente", "Medio", "Testimonio", "Instagram", "656 555 0119", "Recuperación deportiva", "Referidos", "Immunocal Sport", 2100, "Solicitar testimonio y dos referidos", day_offset(3), day_offset(-7), None, "Participa en carreras locales."),
+                ("Claudia Ruiz", "Asociado", "Alto", "Capacitación", "Evento", "656 555 0133", "", "Líder de equipo", "", 4500, "Revisar plan semanal de cinco contactos", day_offset(0), day_offset(-3), "1985-11-28", "Perfil Conexión-Constancia."),
+                ("Luis Ortega", "Asociado", "Medio", "Activación", "Referido", "656 555 0166", "", "Productor", "", 1800, "Agendar capacitación técnica", day_offset(4), day_offset(-10), None, "Necesita acompañamiento para crear rutina."),
             ],
         )
         db.executemany(
@@ -233,11 +239,11 @@ def initialize_database() -> None:
         db.executemany(
             "INSERT INTO daily_metrics (metric_date,new_prospects,presentations,new_clients,new_associates,sales,products_sold) VALUES (?,?,?,?,?,?,?)",
             [
-                ("2026-07-18", 3, 2, 1, 0, 4200, "Platinum x1, Sport x1"),
-                ("2026-07-19", 2, 1, 0, 1, 3100, "Classic x1"),
-                ("2026-07-20", 5, 3, 2, 0, 7800, "Platinum x2, Sport x1"),
-                ("2026-07-21", 4, 2, 1, 1, 6400, "Platinum x1, Classic x2"),
-                (today(), 2, 1, 1, 0, 3200, "Platinum x1"),
+                (day_offset(-4), 3, 2, 1, 0, 4200, "Platinum x1, Sport x1"),
+                (day_offset(-3), 2, 1, 0, 1, 3100, "Classic x1"),
+                (day_offset(-2), 5, 3, 2, 0, 7800, "Platinum x2, Sport x1"),
+                (day_offset(-1), 4, 2, 1, 1, 6400, "Platinum x1, Classic x2"),
+                (day_offset(0), 2, 1, 1, 0, 3200, "Platinum x1"),
             ],
         )
         db.executemany(
@@ -252,10 +258,13 @@ def initialize_database() -> None:
         db.executemany(
             "INSERT INTO achievements (slug,title,description,icon,unlocked_at) VALUES (?,?,?,?,?)",
             [
-                ("first-steps", "Primeros pasos", "Completaste tu propósito y tu primera meta.", "🧭", "2026-07-02"),
-                ("connector", "Gran conectora", "Registraste 25 conversaciones significativas.", "🤝", "2026-07-14"),
-                ("streak-7", "Racha imparable", "Trabajaste tu plan durante siete días.", "🔥", "2026-07-20"),
-                ("mentor", "Mentora en camino", "Acompañaste a tu primer asociado.", "🏅", None),
+                ("first-steps", "Primeros pasos", "Escribe tu propósito y define tu primera meta.", "🧭", None),
+                ("network-10", "Red en marcha", "Registra 10 personas en tu red.", "🌐", None),
+                ("connector", "Gran conexión", "Registra 25 conversaciones significativas.", "🤝", None),
+                ("streak-7", "Racha imparable", "Trabaja tu plan durante siete días seguidos.", "🔥", None),
+                ("mentor", "Mentoría en camino", "Acompaña a tu primer asociado.", "🏅", None),
+                ("first-sale", "Primera venta", "Registra tu primera venta del mes.", "💫", None),
+                ("level-5", "Nivel 5 alcanzado", "Acumula 1,000 XP de experiencia.", "⭐", None),
             ],
         )
         db.executemany(
@@ -269,13 +278,98 @@ def initialize_database() -> None:
         )
 
 
+def compute_streak(db) -> int:
+    """Días consecutivos con registro diario, contando hacia atrás desde hoy."""
+    recorded = {row["metric_date"] for row in rows(db.execute("SELECT metric_date FROM daily_metrics ORDER BY metric_date DESC LIMIT 400"))}
+    if not recorded:
+        return 0
+    cursor = date.today()
+    if cursor.isoformat() not in recorded:
+        # Aún no se registra hoy: la racha sigue viva si ayer sí se registró.
+        cursor -= timedelta(days=1)
+    streak = 0
+    while cursor.isoformat() in recorded:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
+def achievement_stats(db) -> dict:
+    user = fetch_one(db, "SELECT xp, purpose FROM users WHERE id=1") or {}
+    counts = {item["kind"]: item["count"] for item in rows(db.execute("SELECT kind,COUNT(*) count FROM contacts GROUP BY kind"))}
+    return {
+        "xp": user.get("xp", 0),
+        "has_purpose": bool((user.get("purpose") or "").strip()),
+        "contacts": sum(counts.values()),
+        "associates": counts.get("Asociado", 0),
+        "goals": db.execute("SELECT COUNT(*) FROM goals").fetchone()[0],
+        "streak": compute_streak(db),
+        "sales": db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics").fetchone()[0],
+    }
+
+
+ACHIEVEMENT_RULES = {
+    "first-steps": lambda s: s["has_purpose"] and s["goals"] > 0,
+    "network-10": lambda s: s["contacts"] >= 10,
+    "connector": lambda s: s["contacts"] >= 25,
+    "streak-7": lambda s: s["streak"] >= 7,
+    "mentor": lambda s: s["associates"] >= 1,
+    "first-sale": lambda s: s["sales"] > 0,
+    "level-5": lambda s: s["xp"] >= 1000,
+}
+
+
+def evaluate_achievements(db) -> list[dict]:
+    """Desbloquea los logros cuya condición ya se cumple. Devuelve los nuevos."""
+    locked = rows(db.execute("SELECT slug,title,icon FROM achievements WHERE unlocked_at IS NULL"))
+    if not locked:
+        return []
+    stats = achievement_stats(db)
+    unlocked = []
+    for achievement in locked:
+        rule = ACHIEVEMENT_RULES.get(achievement["slug"])
+        if rule and rule(stats):
+            db.execute("UPDATE achievements SET unlocked_at=? WHERE slug=?", (today(), achievement["slug"]))
+            unlocked.append(achievement)
+    return unlocked
+
+
+def sync_progress(db) -> list[dict]:
+    """Recalcula racha y meta de ventas, y evalúa logros. Devuelve logros nuevos."""
+    db.execute("UPDATE users SET streak=? WHERE id=1", (compute_streak(db),))
+    month_sales = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0]
+    db.execute("UPDATE goals SET current=? WHERE unit='MXN'", (month_sales,))
+    return evaluate_achievements(db)
+
+
+def week_activity(db) -> list[dict]:
+    """Los últimos siete días con marca de actividad, para los puntos de la racha."""
+    recorded = {row["metric_date"] for row in rows(db.execute("SELECT metric_date FROM daily_metrics ORDER BY metric_date DESC LIMIT 60"))}
+    labels = ["L", "M", "M", "J", "V", "S", "D"]
+    start = date.today() - timedelta(days=date.today().weekday())
+    week = []
+    for index in range(7):
+        current = start + timedelta(days=index)
+        week.append({
+            "label": labels[index],
+            "date": current.isoformat(),
+            "done": current.isoformat() in recorded,
+            "future": current > date.today(),
+        })
+    return week
+
+
 def dashboard_payload(db) -> dict:
+    new_achievements = sync_progress(db)
     user = fetch_one(db, "SELECT * FROM users WHERE id=1")
     profile_scores = rows(db.execute("SELECT * FROM profile_scores WHERE user_id=1 ORDER BY score DESC"))
     task_list = rows(db.execute("SELECT t.*, c.name AS contact_name FROM tasks t LEFT JOIN contacts c ON c.id=t.contact_id WHERE due_date=? ORDER BY completed, due_time", (today(),)))
     contact_counts = {item["kind"]: item["count"] for item in rows(db.execute("SELECT kind,COUNT(*) count FROM contacts GROUP BY kind"))}
     metrics = fetch_one(db, "SELECT * FROM daily_metrics WHERE metric_date=?", (today(),)) or {}
     sales_month = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0]
+    month_totals = fetch_one(db, """SELECT COALESCE(SUM(new_prospects),0) prospects, COALESCE(SUM(new_clients),0) clients,
+        COALESCE(SUM(new_associates),0) associates FROM daily_metrics WHERE metric_date LIKE ?""", (f"{today()[:7]}-%",)) or {}
+    week_prospects = db.execute("SELECT COALESCE(SUM(new_prospects),0) FROM daily_metrics WHERE metric_date>=?", (day_offset(-6),)).fetchone()[0]
     user["level"] = user["xp"] // 250 + 1
     user["level_progress"] = user["xp"] % 250
     return {
@@ -285,8 +379,15 @@ def dashboard_payload(db) -> dict:
         "contact_counts": contact_counts,
         "metrics": metrics,
         "sales_month": sales_month,
+        "trends": {
+            "week_prospects": week_prospects,
+            "month_clients": month_totals.get("clients", 0),
+            "month_associates": month_totals.get("associates", 0),
+        },
+        "week_activity": week_activity(db),
         "goals": rows(db.execute("SELECT * FROM goals ORDER BY id")),
-        "achievements": rows(db.execute("SELECT * FROM achievements ORDER BY unlocked_at IS NULL, unlocked_at DESC")),
+        "achievements": rows(db.execute("SELECT * FROM achievements ORDER BY unlocked_at IS NULL, unlocked_at DESC, id")),
+        "new_achievements": new_achievements,
         "recent_contacts": rows(db.execute("SELECT * FROM contacts ORDER BY COALESCE(last_contact,created_at) DESC LIMIT 5")),
         "development": rows(db.execute("SELECT * FROM development_items ORDER BY id")),
     }
@@ -298,6 +399,13 @@ class AppHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] {fmt % args}")
 
+    def handle_one_request(self) -> None:
+        # El navegador puede cortar la conexión a media respuesta; no es un error real.
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+
     def send_json(self, payload, status=HTTPStatus.OK) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -308,10 +416,37 @@ class AppHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length", "0"))
-        return json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        if length <= 0:
+            return {}
+        if length > MAX_BODY_BYTES:
+            raise ValueError("Cuerpo demasiado grande")
+        payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Se esperaba un objeto JSON")
+        return payload
+
+    def dispatch(self, route) -> None:
+        """Ninguna solicitud malformada debe tumbar el manejador."""
+        try:
+            route()
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self.send_json({"error": "El cuerpo de la solicitud no es JSON válido en UTF-8"}, HTTPStatus.BAD_REQUEST)
+        except ValueError as error:
+            self.send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
+        except Exception as error:
+            self.log_message("Error no controlado: %s", error)
+            try:
+                self.send_json({"error": "Ocurrió un error inesperado en el servidor"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            except Exception:
+                self.close_connection = True
 
     def do_GET(self) -> None:
+        self.dispatch(self.route_get)
+
+    def route_get(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/"):
             self.handle_api_get(parsed)
@@ -319,6 +454,9 @@ class AppHandler(BaseHTTPRequestHandler):
         self.serve_static(parsed.path)
 
     def do_POST(self) -> None:
+        self.dispatch(self.route_post)
+
+    def route_post(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/contacts":
             self.create_contact()
@@ -326,25 +464,63 @@ class AppHandler(BaseHTTPRequestHandler):
             self.save_metrics()
         elif parsed.path == "/api/profile/scores":
             self.save_profile_scores()
+        elif parsed.path == "/api/tasks":
+            self.create_task()
         else:
             self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
 
     def do_PATCH(self) -> None:
+        self.dispatch(self.route_patch)
+
+    def route_patch(self) -> None:
         parsed = urlparse(self.path)
         parts = parsed.path.strip("/").split("/")
         if parsed.path == "/api/profile":
             self.update_profile()
         elif len(parts) == 3 and parts[:2] == ["api", "tasks"]:
-            self.toggle_task(int(parts[2]))
+            self.update_task(self.parse_id(parts[2]))
         elif len(parts) == 3 and parts[:2] == ["api", "contacts"]:
-            self.update_contact(int(parts[2]))
+            self.update_contact(self.parse_id(parts[2]))
+        elif len(parts) == 3 and parts[:2] == ["api", "goals"]:
+            self.update_goal(self.parse_id(parts[2]))
+        elif len(parts) == 3 and parts[:2] == ["api", "development"]:
+            self.update_development(self.parse_id(parts[2]))
         else:
             self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
 
+    def do_DELETE(self) -> None:
+        self.dispatch(self.route_delete)
+
+    def route_delete(self) -> None:
+        parsed = urlparse(self.path)
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) == 3 and parts[:2] == ["api", "contacts"]:
+            self.delete_record("contacts", self.parse_id(parts[2]), "Contacto eliminado")
+        elif len(parts) == 3 and parts[:2] == ["api", "tasks"]:
+            self.delete_record("tasks", self.parse_id(parts[2]), "Misión eliminada")
+        else:
+            self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
+
+    def parse_id(self, raw: str) -> int | None:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
     def handle_api_get(self, parsed) -> None:
         with connect() as db:
-            if parsed.path == "/api/dashboard":
+            if parsed.path == "/api/health":
+                self.send_json({"ok": True, "database": "turso" if USE_TURSO else "sqlite", "date": today()})
+            elif parsed.path == "/api/export":
+                self.export_data(db)
+            elif parsed.path == "/api/dashboard":
                 self.send_json(dashboard_payload(db))
+            elif parsed.path == "/api/tasks":
+                query = parse_qs(parsed.query)
+                due = query.get("date", [today()])[0]
+                self.send_json(rows(db.execute(
+                    "SELECT t.*, c.name AS contact_name FROM tasks t LEFT JOIN contacts c ON c.id=t.contact_id WHERE due_date=? ORDER BY completed, due_time",
+                    (due,))))
             elif parsed.path == "/api/contacts":
                 query = parse_qs(parsed.query)
                 kind = query.get("kind", [""])[0]
@@ -377,36 +553,156 @@ class AppHandler(BaseHTTPRequestHandler):
             cursor = db.execute(f"INSERT INTO contacts ({','.join(fields)}) VALUES ({','.join('?' for _ in fields)})", values)
             db.execute("UPDATE users SET xp=xp+25 WHERE id=1")
             contact = fetch_one(db, "SELECT * FROM contacts WHERE id=?", (cursor.lastrowid,))
-        self.send_json(contact, HTTPStatus.CREATED)
+            unlocked = evaluate_achievements(db)
+        self.send_json({**contact, "new_achievements": unlocked}, HTTPStatus.CREATED)
 
-    def update_contact(self, contact_id: int) -> None:
+    def update_contact(self, contact_id: int | None) -> None:
+        if contact_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
         data = self.read_json()
-        allowed = {"interest", "stage", "next_action", "next_action_date", "last_contact", "notes", "products", "monthly_consumption"}
+        allowed = {"name", "kind", "interest", "stage", "source", "phone", "email", "health_profile",
+                   "estimated_objective", "products", "monthly_consumption", "next_action",
+                   "next_action_date", "last_contact", "birthday", "notes"}
         updates = [(key, value) for key, value in data.items() if key in allowed]
         if not updates:
             self.send_json({"error": "No hay cambios válidos"}, HTTPStatus.BAD_REQUEST)
+            return
+        if any(key == "name" and not str(value).strip() for key, value in updates):
+            self.send_json({"error": "El nombre no puede quedar vacío"}, HTTPStatus.BAD_REQUEST)
             return
         with connect() as db:
             db.execute(f"UPDATE contacts SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=?", [value for _, value in updates] + [contact_id])
             record = fetch_one(db, "SELECT * FROM contacts WHERE id=?", (contact_id,))
         self.send_json(record if record else {"error": "No encontrado"}, HTTPStatus.OK if record else HTTPStatus.NOT_FOUND)
 
-    def toggle_task(self, task_id: int) -> None:
+    def delete_record(self, table: str, record_id: int | None, message: str) -> None:
+        if record_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        with connect() as db:
+            existing = fetch_one(db, f"SELECT id FROM {table} WHERE id=?", (record_id,))
+            if not existing:
+                self.send_json({"error": "No encontrado"}, HTTPStatus.NOT_FOUND)
+                return
+            db.execute(f"DELETE FROM {table} WHERE id=?", (record_id,))
+        self.send_json({"ok": True, "message": message})
+
+    def create_task(self) -> None:
         data = self.read_json()
-        completed = 1 if data.get("completed") else 0
+        title = str(data.get("title", "")).strip()
+        if not title:
+            self.send_json({"error": "Escribe un título para la misión"}, HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            points = max(0, min(500, int(data.get("points") or 20)))
+        except (TypeError, ValueError):
+            points = 20
+        values = (
+            title[:160],
+            str(data.get("detail", "")).strip()[:400],
+            str(data.get("category", "")).strip() or "Organización",
+            str(data.get("profile_tag", "")).strip() or "Constancia",
+            points,
+            str(data.get("due_date", "")).strip() or today(),
+            str(data.get("due_time", "")).strip() or None,
+            data.get("contact_id") or None,
+        )
+        with connect() as db:
+            cursor = db.execute(
+                "INSERT INTO tasks (title,detail,category,profile_tag,points,due_date,due_time,contact_id) VALUES (?,?,?,?,?,?,?,?)",
+                values,
+            )
+            task = fetch_one(db, "SELECT * FROM tasks WHERE id=?", (cursor.lastrowid,))
+        self.send_json(task, HTTPStatus.CREATED)
+
+    def update_task(self, task_id: int | None) -> None:
+        if task_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        data = self.read_json()
         with connect() as db:
             task = fetch_one(db, "SELECT * FROM tasks WHERE id=?", (task_id,))
             if not task:
                 self.send_json({"error": "Misión no encontrada"}, HTTPStatus.NOT_FOUND)
                 return
-            was_completed = task["completed"]
-            db.execute("UPDATE tasks SET completed=? WHERE id=?", (completed, task_id))
-            if completed and not was_completed:
-                db.execute("UPDATE users SET xp=xp+? WHERE id=1", (task["points"],))
-            elif not completed and was_completed:
-                db.execute("UPDATE users SET xp=MAX(0,xp-?) WHERE id=1", (task["points"],))
+            editable = {"title", "detail", "category", "profile_tag", "due_date", "due_time", "points"}
+            updates = [(key, value) for key, value in data.items() if key in editable]
+            if updates:
+                db.execute(f"UPDATE tasks SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=?",
+                           [value for _, value in updates] + [task_id])
+            unlocked = []
+            if "completed" in data:
+                completed = 1 if data.get("completed") else 0
+                was_completed = task["completed"]
+                db.execute("UPDATE tasks SET completed=? WHERE id=?", (completed, task_id))
+                if completed and not was_completed:
+                    db.execute("UPDATE users SET xp=xp+? WHERE id=1", (task["points"],))
+                elif not completed and was_completed:
+                    db.execute("UPDATE users SET xp=MAX(0,xp-?) WHERE id=1", (task["points"],))
+                unlocked = evaluate_achievements(db)
+            elif not updates:
+                self.send_json({"error": "No hay cambios válidos"}, HTTPStatus.BAD_REQUEST)
+                return
             user = fetch_one(db, "SELECT * FROM users WHERE id=1")
-        self.send_json({"ok": True, "xp": user["xp"], "level": user["xp"] // 250 + 1})
+        self.send_json({"ok": True, "xp": user["xp"], "level": user["xp"] // 250 + 1, "new_achievements": unlocked})
+
+    def update_goal(self, goal_id: int | None) -> None:
+        if goal_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        data = self.read_json()
+        updates = []
+        for key in ("title", "unit", "status"):
+            if key in data:
+                updates.append((key, str(data[key]).strip()[:120]))
+        for key in ("current", "target"):
+            if key in data:
+                try:
+                    updates.append((key, max(0, float(data[key] or 0))))
+                except (TypeError, ValueError):
+                    self.send_json({"error": f"El valor de {key} debe ser un número"}, HTTPStatus.BAD_REQUEST)
+                    return
+        if not updates:
+            self.send_json({"error": "No hay cambios válidos"}, HTTPStatus.BAD_REQUEST)
+            return
+        with connect() as db:
+            db.execute(f"UPDATE goals SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=?",
+                       [value for _, value in updates] + [goal_id])
+            record = fetch_one(db, "SELECT * FROM goals WHERE id=?", (goal_id,))
+        self.send_json(record if record else {"error": "No encontrada"}, HTTPStatus.OK if record else HTTPStatus.NOT_FOUND)
+
+    def update_development(self, item_id: int | None) -> None:
+        if item_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        data = self.read_json()
+        try:
+            progress = max(0, min(100, int(data.get("progress"))))
+        except (TypeError, ValueError):
+            self.send_json({"error": "El avance debe ser un número entre 0 y 100"}, HTTPStatus.BAD_REQUEST)
+            return
+        with connect() as db:
+            record = fetch_one(db, "SELECT * FROM development_items WHERE id=?", (item_id,))
+            if not record:
+                self.send_json({"error": "No encontrada"}, HTTPStatus.NOT_FOUND)
+                return
+            db.execute("UPDATE development_items SET progress=? WHERE id=?", (progress, item_id))
+            record = fetch_one(db, "SELECT * FROM development_items WHERE id=?", (item_id,))
+        self.send_json(record)
+
+    def export_data(self, db) -> None:
+        tables = ["users", "profile_scores", "contacts", "tasks", "daily_metrics", "goals", "achievements", "development_items"]
+        payload = {"exported_at": datetime.now().isoformat(timespec="seconds"), "data": {}}
+        for table in tables:
+            payload["data"][table] = rows(db.execute(f"SELECT * FROM {table}"))
+        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Disposition", f'attachment; filename="brujula-respaldo-{today()}.json"')
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def save_metrics(self) -> None:
         data = self.read_json()
@@ -422,7 +718,9 @@ class AppHandler(BaseHTTPRequestHandler):
                 [metric_date] + values,
             )
             db.execute("UPDATE users SET xp=xp+15 WHERE id=1")
-        self.send_json({"ok": True, "message": "Avance guardado +15 XP"})
+            unlocked = sync_progress(db)
+            streak = fetch_one(db, "SELECT streak FROM users WHERE id=1")["streak"]
+        self.send_json({"ok": True, "message": "Avance guardado +15 XP", "streak": streak, "new_achievements": unlocked})
 
     def save_profile_scores(self) -> None:
         data = self.read_json()

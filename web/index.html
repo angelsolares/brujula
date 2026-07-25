@@ -41,8 +41,8 @@
       <header class="topbar">
         <button class="mobile-menu" id="mobileMenu" aria-label="Abrir menú">☰</button>
         <div>
-          <p class="eyebrow" id="todayLabel">MIÉRCOLES · 22 JULIO</p>
-          <h1 id="viewTitle">¡Buenos días, Mariana!</h1>
+          <p class="eyebrow" id="todayLabel"></p>
+          <h1 id="viewTitle">Bienvenida a BRÚJULA</h1>
         </div>
         <div class="top-actions">
           <div class="xp-pill"><span>✦</span><div><small>EXPERIENCIA</small><strong id="headerXp">0 XP</strong></div></div>
@@ -72,9 +72,9 @@
           <button class="text-button" data-go-view="measure">Ver reporte completo →</button>
         </div>
         <div class="stat-grid">
-          <article class="stat-card purple"><span class="stat-icon">♙</span><div><small>PROSPECTOS</small><strong id="statProspects">0</strong><p><em>+2</em> esta semana</p></div><span class="spark">⌁</span></article>
-          <article class="stat-card pink"><span class="stat-icon">♡</span><div><small>CLIENTES</small><strong id="statClients">0</strong><p><em>+1</em> este mes</p></div><span class="spark">⌁</span></article>
-          <article class="stat-card blue"><span class="stat-icon">♢</span><div><small>ASOCIADOS</small><strong id="statAssociates">0</strong><p><em>2</em> activos</p></div><span class="spark">⌁</span></article>
+          <article class="stat-card purple"><span class="stat-icon">♙</span><div><small>PROSPECTOS</small><strong id="statProspects">0</strong><p><em id="trendProspects">+0</em> esta semana</p></div><span class="spark">⌁</span></article>
+          <article class="stat-card pink"><span class="stat-icon">♡</span><div><small>CLIENTES</small><strong id="statClients">0</strong><p><em id="trendClients">+0</em> este mes</p></div><span class="spark">⌁</span></article>
+          <article class="stat-card blue"><span class="stat-icon">♢</span><div><small>ASOCIADOS</small><strong id="statAssociates">0</strong><p><em id="trendAssociates">+0</em> este mes</p></div><span class="spark">⌁</span></article>
           <article class="stat-card gold"><span class="stat-icon">✦</span><div><small>VENTAS DEL MES</small><strong id="statSales">$0</strong><p><em id="salesPercent">0%</em> de la meta</p></div><span class="spark">⌁</span></article>
         </div>
 
@@ -86,7 +86,7 @@
           </article>
           <article class="panel compass-panel">
             <div class="panel-head"><div><span class="mini-kicker">TUS FORTALEZAS</span><h3>Brújula personal</h3></div><button class="round-arrow" data-go-view="profile">↗</button></div>
-            <div class="dominant-profile"><img src="/assets/icon-leadership.png" alt="Icono del perfil Liderazgo"><div><small>PERFIL DOMINANTE</small><strong id="dominantProfile">Liderazgo</strong><span>Inspirar y desarrollar personas</span></div></div>
+            <div class="dominant-profile"><img id="dominantProfileIcon" src="/assets/icon-leadership.png" alt="Icono del perfil dominante"><div><small>PERFIL DOMINANTE</small><strong id="dominantProfile">Liderazgo</strong><span id="dominantProfileHint">Inspirar y desarrollar personas</span></div></div>
             <div class="profile-bars" id="dashboardProfileBars"></div>
             <blockquote id="profileTip">Tu liderazgo crece cuando cada conversación termina con un siguiente paso claro.</blockquote>
           </article>
@@ -94,6 +94,9 @@
 
         <div class="section-heading compact"><div><span class="mini-kicker">SEGUIMIENTO</span><h2>Personas que necesitan tu atención</h2></div><button class="text-button" data-go-view="contacts">Ver toda mi red →</button></div>
         <div class="people-strip" id="attentionContacts"></div>
+
+        <div class="section-heading compact"><div><span class="mini-kicker">RECONOCIMIENTOS</span><h2>Tus logros</h2></div><span class="soft-chip" id="achievementCount">0 de 0</span></div>
+        <div class="achievement-strip" id="achievementStrip"></div>
       </section>
 
       <section class="view" id="view-contacts">
@@ -120,12 +123,12 @@
       </section>
 
       <section class="view" id="view-agenda">
-        <div class="page-intro"><div><span class="mini-kicker">ACTUAR</span><h2>Agenda de hoy</h2><p>Acciones sugeridas según tus fortalezas y tu red.</p></div><div class="day-score"><span>✦</span><strong id="agendaPoints">0 XP</strong><small>disponibles hoy</small></div></div>
+        <div class="page-intro"><div><span class="mini-kicker">ACTUAR</span><h2>Agenda de hoy</h2><p>Acciones sugeridas según tus fortalezas y tu red.</p></div><div class="agenda-intro-actions"><div class="day-score"><span>✦</span><strong id="agendaPoints">0 XP</strong><small>disponibles hoy</small></div><button class="primary-button" id="openTaskDialog">＋ Nueva misión</button></div></div>
         <div class="agenda-layout">
-          <article class="panel timeline-panel"><div class="panel-head"><div><span class="mini-kicker">MIÉRCOLES 22</span><h3>Tu ruta del día</h3></div><span class="soft-chip" id="agendaProgress">0 de 0 listas</span></div><div class="timeline" id="agendaTasks"></div></article>
+          <article class="panel timeline-panel"><div class="panel-head"><div><span class="mini-kicker" id="agendaDayLabel">HOY</span><h3>Tu ruta del día</h3></div><span class="soft-chip" id="agendaProgress">0 de 0 listas</span></div><div class="timeline" id="agendaTasks"></div></article>
           <aside class="agenda-side">
-            <article class="panel focus-card"><span class="focus-icon">♢</span><span class="mini-kicker">PODER DE HOY</span><h3>Conecta antes de convencer</h3><p>Tu perfil de Liderazgo se potencia cuando escuchas la meta de la otra persona.</p><div class="bonus">+10 XP por registrar notas</div></article>
-            <article class="panel tiny-progress"><div><span>Racha semanal</span><strong id="weeklyStreak">9/14</strong></div><div class="week-dots"><i class="done">L</i><i class="done">M</i><i class="done">M</i><i>J</i><i>V</i><i>S</i><i>D</i></div></article>
+            <article class="panel focus-card"><span class="focus-icon">♢</span><span class="mini-kicker">PODER DE HOY</span><h3>Conecta antes de convencer</h3><p id="focusCardText">Tu perfil se potencia cuando escuchas la meta de la otra persona.</p><div class="bonus">+10 XP por registrar notas</div></article>
+            <article class="panel tiny-progress"><div><span>Racha semanal</span><strong id="weeklyStreak">0/7</strong></div><div class="week-dots" id="weekDots"></div></article>
           </aside>
         </div>
       </section>
@@ -145,7 +148,7 @@
         <div class="page-intro"><div><span class="mini-kicker">MEDIR</span><h2>Lo que hice hoy</h2><p>Registrar tus avances convierte esfuerzo en aprendizaje.</p></div><span class="soft-chip">+15 XP al guardar</span></div>
         <div class="measure-layout">
           <form class="panel metrics-form" id="metricsForm">
-            <div class="panel-head"><div><span class="mini-kicker">REGISTRO DIARIO</span><h3>Cuéntale a tu brújula</h3></div><span class="metric-date">22 JUL</span></div>
+            <div class="panel-head"><div><span class="mini-kicker">REGISTRO DIARIO</span><h3>Cuéntale a tu brújula</h3></div><span class="metric-date" id="metricDateLabel"></span></div>
             <div class="number-grid">
               <label><span>Prospectos nuevos</span><input name="new_prospects" type="number" min="0" value="0"><small>personas</small></label>
               <label><span>Presentaciones</span><input name="presentations" type="number" min="0" value="0"><small>sesiones</small></label>
@@ -165,7 +168,7 @@
         <div class="profile-layout">
           <article class="panel profile-visual"><img id="profileResultImage" src="/assets/profile-result.png" alt="Resultado visual con los cinco perfiles de BRÚJULA"></article>
           <div class="profile-content">
-            <article class="panel purpose-card"><span class="mini-kicker">MI NORTE</span><h3>Mi propósito</h3><blockquote id="purposeText"></blockquote><button class="text-button">Editar mi propósito →</button></article>
+            <article class="panel purpose-card"><span class="mini-kicker">MI NORTE</span><h3>Mi propósito</h3><blockquote id="purposeText"></blockquote><button class="text-button" id="openPurposeEdit" type="button">Editar mi propósito →</button></article>
             <article class="panel"><div class="panel-head"><div><span class="mini-kicker">RESULTADOS</span><h3>Mis cinco fortalezas</h3></div></div><div class="large-profile-bars" id="largeProfileBars"></div></article>
           </div>
         </div>
@@ -320,12 +323,12 @@
         <section class="guide-section" id="guideFaq">
           <div class="guide-section-head"><div><span class="mini-kicker">DUDAS FRECUENTES</span><h2>Respuestas rápidas</h2><p>Lo esencial para trabajar con confianza y cuidar tu información.</p></div><span class="section-number">06</span></div>
           <div class="faq-grid">
-            <details open><summary>¿Dónde se guarda mi información?<span>＋</span></summary><p>En la base SQLite local <b>data/brujula.db</b>. Tus contactos, tareas, métricas y perfil permanecen en este equipo.</p></details>
+            <details open><summary>¿Dónde se guarda mi información?<span>＋</span></summary><p>Depende de cómo abras BRÚJULA. En tu computadora los datos viven en el archivo local <b>data/brujula.db</b>; en la versión publicada en internet se guardan en una base de datos en la nube (Turso) vinculada a esta aplicación. Puedes confirmar cuál estás usando en <b id="faqStorageMode">/api/health</b>.</p></details>
             <details><summary>¿Pierdo mis XP cuando subo de nivel?<span>＋</span></summary><p>No. La experiencia es acumulativa. Cada 250 XP aumenta tu nivel y la barra comienza el tramo hacia el siguiente.</p></details>
             <details><summary>¿Qué diferencia hay entre misión, meta y ruta?<span>＋</span></summary><p>Una <b>misión</b> es una acción de hoy; una <b>meta</b> es un resultado medible; una <b>ruta</b> desarrolla una habilidad a lo largo del tiempo.</p></details>
             <details><summary>¿Puedo buscar solo clientes o asociados?<span>＋</span></summary><p>Sí. En <b>Mi red</b> usa los filtros Todos, Prospectos, Clientes o Asociados; también puedes buscar por nombre, etapa o nota.</p></details>
             <details><summary>¿Cómo cambio mi nombre o las ilustraciones?<span>＋</span></summary><p>Presiona tu nombre al final del menú lateral o <b>Editar mis datos</b> en Mi brújula. Elige Mujer, Hombre o Sin avatar; al guardar se adaptan el tablero, el mapa y tu resultado visual.</p></details>
-            <details><summary>¿Cómo respaldo todo el CRM?<span>＋</span></summary><p>Cierra la aplicación y copia el archivo <b>data/brujula.db</b> a una carpeta segura. Ese archivo contiene tus datos.</p></details>
+            <details><summary>¿Cómo respaldo todo el CRM?<span>＋</span></summary><p>Usa el botón <b>Descargar respaldo</b> de abajo: genera un archivo JSON con tus contactos, misiones, métricas, metas y perfil. Funciona igual en la versión local y en la publicada.</p><button class="secondary-button" id="downloadBackup" type="button">⬇ Descargar respaldo</button></details>
             <details><summary>¿El simulador modifica mis puntos?<span>＋</span></summary><p>No. El simulador de esta guía solo sirve para comprender los niveles. Tus XP reales cambian únicamente con las acciones indicadas arriba.</p></details>
           </div>
           <div class="manual-finish"><span class="manual-finish-art">🧭</span><div><span class="mini-kicker">YA CONOCES EL CAMINO</span><h2>Descubre tus fortalezas. Traza tu rumbo. Alcanza tu meta.</h2><p>Vuelve a esta guía cuando necesites recordar una regla o explicar BRÚJULA a una persona nueva.</p></div><button class="light-button" data-go-view="dashboard">Empezar mi día →</button></div>
@@ -338,7 +341,7 @@
 
   <dialog id="contactDialog" class="modal">
     <form id="contactForm" method="dialog">
-      <div class="modal-head"><div><span class="mini-kicker">NUEVA RELACIÓN</span><h2>Agregar a mi red</h2></div><button type="button" data-close-modal aria-label="Cerrar">×</button></div>
+      <div class="modal-head"><div><span class="mini-kicker" id="contactModalKicker">NUEVA RELACIÓN</span><h2 id="contactModalTitle">Agregar a mi red</h2></div><button type="button" data-close-modal aria-label="Cerrar">×</button></div>
       <div class="form-grid">
         <label class="span-2"><span>Nombre completo *</span><input name="name" required placeholder="Ej. Sofía Hernández"></label>
         <label><span>Tipo</span><select name="kind"><option>Prospecto</option><option>Cliente</option><option>Asociado</option></select></label>
@@ -346,12 +349,28 @@
         <label><span>Etapa</span><select name="stage"><option>Nuevo</option><option>Contactado</option><option>Presentación</option><option>Seguimiento</option><option>Cierre</option></select></label>
         <label><span>Fuente</span><select name="source"><option>En persona</option><option>Referido</option><option>Facebook</option><option>Instagram</option><option>Evento</option><option>Café virtual</option></select></label>
         <label><span>Teléfono</span><input name="phone" type="tel" placeholder="656 000 0000"></label>
-        <label><span>Próxima fecha</span><input name="next_action_date" type="date" value="2026-07-23"></label>
+        <label><span>Próxima fecha</span><input name="next_action_date" type="date"></label>
         <label class="span-2"><span>Perfil de salud / interés</span><input name="health_profile" placeholder="¿Qué necesita o qué desea lograr?"></label>
         <label class="span-2"><span>Próxima acción</span><input name="next_action" placeholder="Ej. Enviar testimonio y agendar café"></label>
         <label class="span-2"><span>Notas</span><textarea name="notes" rows="3" placeholder="Detalles que te ayudarán a conectar mejor..."></textarea></label>
       </div>
-      <div class="modal-actions"><button type="button" class="secondary-button" data-close-modal>Cancelar</button><button type="submit" class="primary-button">Guardar contacto +25 XP</button></div>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close-modal>Cancelar</button><button type="submit" class="primary-button" id="contactSubmitButton">Guardar contacto +25 XP</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="taskDialog" class="modal">
+    <form id="taskForm" method="dialog">
+      <div class="modal-head"><div><span class="mini-kicker" id="taskModalKicker">NUEVA MISIÓN</span><h2 id="taskModalTitle">Agregar una misión</h2></div><button type="button" data-close-task aria-label="Cerrar">×</button></div>
+      <div class="form-grid">
+        <label class="span-2"><span>¿Qué vas a hacer? *</span><input name="title" required maxlength="160" placeholder="Ej. Llamar a Sofía para agendar café"></label>
+        <label class="span-2"><span>Detalle</span><input name="detail" maxlength="400" placeholder="Contexto que te ayude a completarla"></label>
+        <label><span>Categoría</span><select name="category"><option>Llamada</option><option>Contenido</option><option>Mentoría</option><option>Redes</option><option>Capacitación</option><option selected>Organización</option></select></label>
+        <label><span>Perfil</span><select name="profile_tag"><option>Conexión</option><option>Liderazgo</option><option>Analista</option><option>Ejecutor</option><option selected>Constancia</option></select></label>
+        <label><span>Fecha</span><input name="due_date" type="date"></label>
+        <label><span>Hora</span><input name="due_time" type="time"></label>
+        <label class="span-2"><span>Puntos de experiencia</span><input name="points" type="number" min="0" max="500" step="5" value="20"><small>Entre 20 y 40 XP para una misión típica.</small></label>
+      </div>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close-task>Cancelar</button><button type="submit" class="primary-button" id="taskSubmitButton">Guardar misión</button></div>
     </form>
   </dialog>
 
@@ -396,7 +415,7 @@
           </div>
         </div>
       </div>
-      <div class="modal-actions profile-modal-actions"><span>🔒 Tus datos se guardan únicamente en este equipo.</span><div><button type="button" class="secondary-button" data-close-profile>Cancelar</button><button type="submit" class="primary-button">Guardar mi perfil</button></div></div>
+      <div class="modal-actions profile-modal-actions"><span id="profilePrivacyNote">🔒 Tus datos se guardan en la base de esta aplicación.</span><div><button type="button" class="secondary-button" data-close-profile>Cancelar</button><button type="submit" class="primary-button">Guardar mi perfil</button></div></div>
     </form>
   </dialog>
 

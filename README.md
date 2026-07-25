@@ -23,11 +23,30 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 - La base se crea y se carga con datos de demostración la primera vez que se inicia.
 - Para conservar cambios, respalda el archivo `data/brujula.db`.
 
+## API
+
+| Método | Ruta | Descripción |
+| --- | --- | --- |
+| GET | `/api/health` | Estado del servidor y si usa SQLite local o Turso. |
+| GET | `/api/dashboard` | Tablero completo: perfil, misiones, racha, logros y tendencias. |
+| GET | `/api/export` | Descarga un respaldo JSON de todas las tablas. |
+| GET/POST | `/api/contacts` | Listar (con filtros `kind` y `q`) y crear contactos. |
+| PATCH/DELETE | `/api/contacts/<id>` | Editar cualquier campo o eliminar un contacto. |
+| GET/POST | `/api/tasks` | Listar misiones por fecha y crear nuevas. |
+| PATCH/DELETE | `/api/tasks/<id>` | Editar, completar o eliminar una misión. |
+| GET/POST | `/api/metrics` | Historial y registro diario de resultados. |
+| PATCH | `/api/goals/<id>` | Ajustar avance y objetivo de una meta. |
+| PATCH | `/api/development/<id>` | Actualizar el progreso de una ruta de desarrollo. |
+| PATCH | `/api/profile` | Editar datos personales y meta mensual. |
+| POST | `/api/profile/scores` | Guardar el resultado del test de perfiles. |
+
 ## Módulos incluidos
 
-- Tablero gamificado con nivel, experiencia, racha y misiones.
-- CRM de prospectos, clientes y asociados.
-- Agenda diaria por perfil y puntos XP.
+- Tablero gamificado con nivel, experiencia, racha calculada y misiones.
+- CRM de prospectos, clientes y asociados con alta, edición y eliminación.
+- Agenda diaria por perfil y puntos XP, con misiones que puedes crear, editar y borrar.
+- Logros que se desbloquean solos al cumplir sus condiciones.
+- Respaldo descargable en JSON desde la guía interactiva.
 - Mapa de crecimiento con metas SMART.
 - Registro de indicadores y ventas diarias.
 - Brújula de cinco perfiles con test rápido interactivo.
