@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17234a">
+  <title>BRÚJULA — Centro de desarrollo</title>
+  <meta name="description" content="CRM gamificado para descubrir fortalezas, trazar el rumbo y alcanzar metas.">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegación principal">
+      <a class="brand" href="#dashboard" aria-label="BRÚJULA inicio">
+        <span class="brand-mark">✦</span>
+        <span><strong>BRÚJULA</strong><small>Centro de desarrollo</small></span>
+      </a>
+      <nav class="nav-list">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span> Mi tablero</button>
+        <button class="nav-item" data-view="contacts"><span>♙</span> Mi red <b id="navContactCount">0</b></button>
+        <button class="nav-item" data-view="agenda"><span>✓</span> Agenda de hoy</button>
+        <button class="nav-item" data-view="map"><span>⌁</span> Mi mapa</button>
+        <button class="nav-item" data-view="measure"><span>↗</span> Medir avances</button>
+        <button class="nav-item" data-view="profile"><span>✣</span> Mi brújula</button>
+        <button class="nav-item" data-view="development"><span>♢</span> Desarrollo</button>
+        <button class="nav-item nav-guide" data-view="guide"><span>?</span> Guía interactiva</button>
+      </nav>
+      <div class="sidebar-quest">
+        <span class="mini-kicker">RACHA ACTIVA</span>
+        <div class="streak-row"><span class="streak-flame">🔥</span><strong id="sideStreak">0 días</strong></div>
+        <p>Un pequeño paso diario mantiene tu rumbo.</p>
+      </div>
+      <button class="profile-mini" id="openAccountProfile" type="button" aria-label="Abrir y editar mi perfil">
+        <div class="avatar">MT</div>
+        <div><strong id="sideUserName">Exploradora</strong><span id="sideUserLevel">Nivel 1</span></div>
+        <span class="profile-chevron">›</span>
+      </button>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="Abrir menú">☰</button>
+        <div>
+          <p class="eyebrow" id="todayLabel">MIÉRCOLES · 22 JULIO</p>
+          <h1 id="viewTitle">¡Buenos días, Mariana!</h1>
+        </div>
+        <div class="top-actions">
+          <div class="xp-pill"><span>✦</span><div><small>EXPERIENCIA</small><strong id="headerXp">0 XP</strong></div></div>
+          <button class="icon-button" aria-label="Notificaciones">♢<i></i></button>
+          <button class="primary-button" data-open-contact><span>＋</span> Nuevo contacto</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-dashboard" aria-labelledby="viewTitle">
+        <article class="hero-card" id="dashboardHero">
+          <div class="hero-overlay"></div>
+          <div class="hero-copy">
+            <span class="chapter-pill">CAPÍTULO 4 · CONECTAR</span>
+            <h2>Tu rumbo está claro.<br>Hoy toca avanzar.</h2>
+            <p id="heroPurpose">Cada conversación abre una nueva posibilidad.</p>
+            <div class="level-progress">
+              <div class="level-row"><strong id="heroLevel">Nivel 1</strong><span id="heroLevelText">0 / 250 XP</span></div>
+              <div class="progress-track"><span id="heroLevelBar"></span></div>
+            </div>
+            <button class="light-button" data-go-view="agenda">Ver misiones de hoy <span>→</span></button>
+          </div>
+          <div class="hero-medal"><span>🏅</span><strong id="heroStreak">0</strong><small>DÍAS</small></div>
+        </article>
+
+        <div class="section-heading">
+          <div><span class="mini-kicker">TU NEGOCIO HOY</span><h2>Panel de rumbo</h2></div>
+          <button class="text-button" data-go-view="measure">Ver reporte completo →</button>
+        </div>
+        <div class="stat-grid">
+          <article class="stat-card purple"><span class="stat-icon">♙</span><div><small>PROSPECTOS</small><strong id="statProspects">0</strong><p><em>+2</em> esta semana</p></div><span class="spark">⌁</span></article>
+          <article class="stat-card pink"><span class="stat-icon">♡</span><div><small>CLIENTES</small><strong id="statClients">0</strong><p><em>+1</em> este mes</p></div><span class="spark">⌁</span></article>
+          <article class="stat-card blue"><span class="stat-icon">♢</span><div><small>ASOCIADOS</small><strong id="statAssociates">0</strong><p><em>2</em> activos</p></div><span class="spark">⌁</span></article>
+          <article class="stat-card gold"><span class="stat-icon">✦</span><div><small>VENTAS DEL MES</small><strong id="statSales">$0</strong><p><em id="salesPercent">0%</em> de la meta</p></div><span class="spark">⌁</span></article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel missions-panel">
+            <div class="panel-head"><div><span class="mini-kicker">ACCIÓN CON PROPÓSITO</span><h3>Misiones de hoy</h3></div><span class="completion-ring" id="taskRing">0/0</span></div>
+            <div class="mission-list" id="dashboardTasks"></div>
+            <button class="wide-ghost-button" data-go-view="agenda">Abrir agenda completa</button>
+          </article>
+          <article class="panel compass-panel">
+            <div class="panel-head"><div><span class="mini-kicker">TUS FORTALEZAS</span><h3>Brújula personal</h3></div><button class="round-arrow" data-go-view="profile">↗</button></div>
+            <div class="dominant-profile"><img src="/assets/icon-leadership.png" alt="Icono del perfil Liderazgo"><div><small>PERFIL DOMINANTE</small><strong id="dominantProfile">Liderazgo</strong><span>Inspirar y desarrollar personas</span></div></div>
+            <div class="profile-bars" id="dashboardProfileBars"></div>
+            <blockquote id="profileTip">Tu liderazgo crece cuando cada conversación termina con un siguiente paso claro.</blockquote>
+          </article>
+        </div>
+
+        <div class="section-heading compact"><div><span class="mini-kicker">SEGUIMIENTO</span><h2>Personas que necesitan tu atención</h2></div><button class="text-button" data-go-view="contacts">Ver toda mi red →</button></div>
+        <div class="people-strip" id="attentionContacts"></div>
+      </section>
+
+      <section class="view" id="view-contacts">
+        <div class="page-intro">
+          <div><span class="mini-kicker">CENTRO DE DESARROLLO</span><h2>Mi red</h2><p>Haz visible cada relación, el interés y el siguiente paso.</p></div>
+          <button class="primary-button" data-open-contact>＋ Agregar persona</button>
+        </div>
+        <div class="contact-summary" id="contactSummary"></div>
+        <article class="panel contacts-panel">
+          <div class="contact-toolbar">
+            <label class="search-box"><span>⌕</span><input id="contactSearch" type="search" placeholder="Buscar por nombre, etapa o nota..."></label>
+            <div class="filter-tabs" role="tablist">
+              <button class="active" data-kind="">Todos</button><button data-kind="Prospecto">Prospectos</button><button data-kind="Cliente">Clientes</button><button data-kind="Asociado">Asociados</button>
+            </div>
+          </div>
+          <div class="contact-table-wrap">
+            <table class="contact-table">
+              <thead><tr><th>Persona</th><th>Tipo</th><th>Interés</th><th>Etapa</th><th>Próxima acción</th><th>Fecha</th><th></th></tr></thead>
+              <tbody id="contactRows"></tbody>
+            </table>
+          </div>
+          <div class="mobile-contact-list" id="mobileContactList"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-agenda">
+        <div class="page-intro"><div><span class="mini-kicker">ACTUAR</span><h2>Agenda de hoy</h2><p>Acciones sugeridas según tus fortalezas y tu red.</p></div><div class="day-score"><span>✦</span><strong id="agendaPoints">0 XP</strong><small>disponibles hoy</small></div></div>
+        <div class="agenda-layout">
+          <article class="panel timeline-panel"><div class="panel-head"><div><span class="mini-kicker">MIÉRCOLES 22</span><h3>Tu ruta del día</h3></div><span class="soft-chip" id="agendaProgress">0 de 0 listas</span></div><div class="timeline" id="agendaTasks"></div></article>
+          <aside class="agenda-side">
+            <article class="panel focus-card"><span class="focus-icon">♢</span><span class="mini-kicker">PODER DE HOY</span><h3>Conecta antes de convencer</h3><p>Tu perfil de Liderazgo se potencia cuando escuchas la meta de la otra persona.</p><div class="bonus">+10 XP por registrar notas</div></article>
+            <article class="panel tiny-progress"><div><span>Racha semanal</span><strong id="weeklyStreak">9/14</strong></div><div class="week-dots"><i class="done">L</i><i class="done">M</i><i class="done">M</i><i>J</i><i>V</i><i>S</i><i>D</i></div></article>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-map">
+        <div class="page-intro"><div><span class="mini-kicker">PLANEAR</span><h2>Mi mapa de crecimiento</h2><p>Tu avatar avanza cada vez que conviertes un plan en acción.</p></div><span class="map-total"><small>PROGRESO GENERAL</small><strong id="mapTotal">0%</strong></span></div>
+        <article class="journey-card">
+          <img id="journeyImage" src="/assets/mission-trail.png" alt="Valle ilustrado con un camino de metas hacia una copa">
+          <div class="journey-shade"></div>
+          <div class="journey-copy"><span class="chapter-pill">RUTA ACTUAL</span><h3>De propósito a liderazgo</h3><p>Sigue el sendero: cada meta completada descubre la siguiente etapa.</p></div>
+          <div class="map-nodes"><button class="node complete" style="--x:24%;--y:76%"><i>✓</i><span>Propósito</span></button><button class="node complete" style="--x:40%;--y:68%"><i>✓</i><span>Meta</span></button><button class="node current" style="--x:57%;--y:62%"><i>3</i><span>Prospectos</span></button><button class="node" style="--x:68%;--y:50%"><i>4</i><span>Aprendizaje</span></button><button class="node" style="--x:79%;--y:38%"><i>5</i><span>Desempeño</span></button><button class="node" style="--x:88%;--y:24%"><i>6</i><span>Liderazgo</span></button></div>
+        </article>
+        <div class="goal-grid" id="goalGrid"></div>
+      </section>
+
+      <section class="view" id="view-measure">
+        <div class="page-intro"><div><span class="mini-kicker">MEDIR</span><h2>Lo que hice hoy</h2><p>Registrar tus avances convierte esfuerzo en aprendizaje.</p></div><span class="soft-chip">+15 XP al guardar</span></div>
+        <div class="measure-layout">
+          <form class="panel metrics-form" id="metricsForm">
+            <div class="panel-head"><div><span class="mini-kicker">REGISTRO DIARIO</span><h3>Cuéntale a tu brújula</h3></div><span class="metric-date">22 JUL</span></div>
+            <div class="number-grid">
+              <label><span>Prospectos nuevos</span><input name="new_prospects" type="number" min="0" value="0"><small>personas</small></label>
+              <label><span>Presentaciones</span><input name="presentations" type="number" min="0" value="0"><small>sesiones</small></label>
+              <label><span>Clientes nuevos</span><input name="new_clients" type="number" min="0" value="0"><small>clientes</small></label>
+              <label><span>Asociados nuevos</span><input name="new_associates" type="number" min="0" value="0"><small>socios</small></label>
+            </div>
+            <label class="money-field"><span>¿Cuánto vendí?</span><div><b>$</b><input name="sales" type="number" min="0" step="100" value="0"><small>MXN</small></div></label>
+            <label class="full-field"><span>Productos específicos vendidos</span><input name="products_sold" type="text" placeholder="Ej. Platinum x2, Sport x1"></label>
+            <button class="primary-button wide" type="submit">Guardar mi avance ✦</button>
+          </form>
+          <article class="panel report-panel"><div class="panel-head"><div><span class="mini-kicker">ÚLTIMOS 5 DÍAS</span><h3>Tu energía en movimiento</h3></div></div><div class="sales-chart" id="salesChart"></div><div class="report-totals" id="reportTotals"></div></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-profile">
+        <div class="page-intro"><div><span class="mini-kicker">CONOCIMIENTO PERSONAL</span><h2>Mi brújula</h2><p>Conoce tus fortalezas y úsalas para apoyar tus áreas de oportunidad.</p></div><div class="profile-page-actions"><button class="secondary-button" id="openAccountProfileTop">Editar mis datos</button><button class="primary-button" id="openQuiz">✦ Repetir test</button></div></div>
+        <div class="profile-layout">
+          <article class="panel profile-visual"><img id="profileResultImage" src="/assets/profile-result.png" alt="Resultado visual con los cinco perfiles de BRÚJULA"></article>
+          <div class="profile-content">
+            <article class="panel purpose-card"><span class="mini-kicker">MI NORTE</span><h3>Mi propósito</h3><blockquote id="purposeText"></blockquote><button class="text-button">Editar mi propósito →</button></article>
+            <article class="panel"><div class="panel-head"><div><span class="mini-kicker">RESULTADOS</span><h3>Mis cinco fortalezas</h3></div></div><div class="large-profile-bars" id="largeProfileBars"></div></article>
+          </div>
+        </div>
+        <article class="panel profile-guide"><img src="/assets/profiles-compass.png" alt="Guía ilustrada de perfiles Analista, Ejecutor, Conexión, Constancia y Liderazgo"><div><span class="mini-kicker">TU COMBINACIÓN</span><h3>Liderazgo + Conexión = Inspiradora</h3><p>Tu ventaja está en crear una visión atractiva, escuchar con empatía y acompañar a las personas para que desarrollen su potencial.</p><div class="guide-tags"><span>Motiva con el ejemplo</span><span>Genera confianza</span><span>Forma nuevos líderes</span></div></div></article>
+      </section>
+
+      <section class="view" id="view-development">
+        <div class="page-intro"><div><span class="mini-kicker">DESARROLLAR</span><h2>Mi crecimiento personal</h2><p>Fortalece habilidades, crea hábitos y forma líderes.</p></div><span class="soft-chip">4 rutas activas</span></div>
+        <div class="learning-hero"><div><span class="chapter-pill">SIGUIENTE LECCIÓN</span><h3>El poder de una buena pregunta</h3><p>Aprende a escuchar antes de ofrecer una solución.</p><button class="light-button">Continuar aprendizaje →</button></div><span class="learning-orb">🎧</span></div>
+        <div class="learning-grid" id="developmentGrid"></div>
+        <article class="panel growth-note"><span>🌱</span><div><small>RECORDATORIO DE CRECIMIENTO</small><h3>No necesitas cambiar quién eres.</h3><p>Necesitas una estrategia que aproveche tus fortalezas.</p></div></article>
+      </section>
+
+      <section class="view" id="view-guide">
+        <div class="guide-hero">
+          <div class="guide-hero-copy">
+            <span class="chapter-pill">MANUAL VIVO · BRÚJULA</span>
+            <h2>Aprende jugando.<br>Avanza con intención.</h2>
+            <p>Descubre cada herramienta, entiende cómo ganas experiencia y convierte tu rutina diaria en un camino de crecimiento.</p>
+            <div class="guide-hero-actions">
+              <button class="light-button" id="startTour">Iniciar recorrido guiado <span>→</span></button>
+              <button class="guide-link-button" data-guide-section="guideGamification">¿Cómo gano puntos?</button>
+            </div>
+          </div>
+          <div class="guide-compass-art" aria-hidden="true">
+            <div class="orbit orbit-one"><i>✦</i></div>
+            <div class="orbit orbit-two"><i>XP</i></div>
+            <div class="compass-face"><span>N</span><b>✦</b><i></i></div>
+            <div class="guide-float-card card-level"><small>NIVEL</small><strong id="guideHeroLevel">1</strong></div>
+            <div class="guide-float-card card-streak"><span>🔥</span><strong id="guideHeroStreak">0</strong><small>días</small></div>
+          </div>
+        </div>
+
+        <nav class="guide-jumpbar" aria-label="Contenido de la guía">
+          <button data-guide-section="guideRoute">1. Tu recorrido</button>
+          <button data-guide-section="guideGamification">2. Puntos y niveles</button>
+          <button data-guide-section="guideCrm">3. Cómo usar el CRM</button>
+          <button data-guide-section="guideProfiles">4. Tus perfiles</button>
+          <button data-guide-section="guideWeek">5. Primera semana</button>
+          <button data-guide-section="guideFaq">6. Dudas frecuentes</button>
+        </nav>
+
+        <section class="guide-section" id="guideRoute">
+          <div class="guide-section-head"><div><span class="mini-kicker">EL CICLO BRÚJULA</span><h2>Una ruta, siete estaciones</h2><p>La app sigue el método del documento: conocerte, planear, gestionar, actuar, medir y desarrollar. Al terminar, el ciclo vuelve a comenzar con más experiencia.</p></div><span class="section-number">01</span></div>
+          <div class="route-loop">
+            <button class="route-stop stop-profile" data-go-view="profile"><i>✣</i><b>Conócete</b><small>Descubre tu perfil y propósito</small></button>
+            <span class="route-arrow">→</span>
+            <button class="route-stop stop-map" data-go-view="map"><i>⌁</i><b>Planea</b><small>Traza metas y revisa tu mapa</small></button>
+            <span class="route-arrow">→</span>
+            <button class="route-stop stop-crm" data-go-view="contacts"><i>♙</i><b>Gestiona</b><small>Cuida cada relación y seguimiento</small></button>
+            <span class="route-arrow">→</span>
+            <button class="route-stop stop-act" data-go-view="agenda"><i>✓</i><b>Actúa</b><small>Completa misiones con propósito</small></button>
+            <span class="route-arrow">→</span>
+            <button class="route-stop stop-measure" data-go-view="measure"><i>↗</i><b>Mide</b><small>Registra resultados cada día</small></button>
+            <span class="route-arrow">→</span>
+            <button class="route-stop stop-grow" data-go-view="development"><i>♢</i><b>Desarrolla</b><small>Fortalece habilidades y hábitos</small></button>
+          </div>
+          <div class="route-tip"><span>💡</span><div><strong>La rutina recomendada</strong><p>Empieza en <b>Mi tablero</b>, completa tu <b>Agenda de hoy</b>, registra resultados en <b>Medir avances</b> y termina revisando tu <b>Mapa</b>.</p></div><button data-go-view="dashboard">Ir a mi tablero →</button></div>
+        </section>
+
+        <section class="guide-section" id="guideGamification">
+          <div class="guide-section-head"><div><span class="mini-kicker">GAMIFICACIÓN</span><h2>Tu esfuerzo se convierte en experiencia</h2><p>Los puntos XP reconocen acciones que hacen crecer tu negocio. Cada 250 XP subes un nivel; no se descuentan al avanzar.</p></div><span class="section-number">02</span></div>
+          <div class="gamification-grid">
+            <article class="panel xp-lab">
+              <div class="panel-head"><div><span class="mini-kicker">SIMULADOR</span><h3>¿Qué nivel tendría?</h3></div><span class="xp-star">✦</span></div>
+              <div class="simulator-level"><div class="simulator-badge"><small>NIVEL</small><strong id="simulatedLevel">1</strong></div><div class="simulator-copy"><strong id="simulatedXp">0 XP</strong><span id="simulatedRemaining">250 XP para el siguiente nivel</span></div></div>
+              <input class="xp-slider" id="xpSimulator" type="range" min="0" max="5000" step="5" value="0" aria-label="Simular puntos de experiencia">
+              <div class="simulator-track"><span id="simulatorBar"></span></div>
+              <div class="simulator-labels"><span id="simulatorStart">Nivel 1</span><span id="simulatorEnd">Nivel 2</span></div>
+              <p>Mueve el control para explorar. Es solo una simulación: tus puntos reales no cambian.</p>
+            </article>
+            <article class="panel xp-chart-card">
+              <div class="panel-head"><div><span class="mini-kicker">FUENTES DE XP</span><h3>Acciones que sí dan puntos</h3></div><span class="soft-chip">REGLAS ACTUALES</span></div>
+              <div class="xp-chart">
+                <div class="xp-chart-row"><span class="xp-action-icon profile">✣</span><div><strong>Completar test de perfil</strong><i><b style="--xp-width:100%"></b></i></div><em>+75 XP</em></div>
+                <div class="xp-chart-row"><span class="xp-action-icon mission">✓</span><div><strong>Completar una misión</strong><i><b style="--xp-width:53%"></b></i></div><em>+20 a 40 XP</em></div>
+                <div class="xp-chart-row"><span class="xp-action-icon contact">♙</span><div><strong>Agregar un contacto</strong><i><b style="--xp-width:33%"></b></i></div><em>+25 XP</em></div>
+                <div class="xp-chart-row"><span class="xp-action-icon metric">↗</span><div><strong>Guardar el avance diario</strong><i><b style="--xp-width:20%"></b></i></div><em>+15 XP</em></div>
+              </div>
+              <div class="truth-note"><span>ⓘ</span><p>Avanzar la etapa de un contacto y consultar pantallas ayuda a tu proceso, pero actualmente no suma XP.</p></div>
+            </article>
+          </div>
+          <div class="game-concepts">
+            <article class="game-concept"><span class="concept-visual fire">🔥<i>9</i></span><div><small>RACHA</small><h3>La fuerza de volver</h3><p>Representa la continuidad de tu trabajo. La meta es mantener una acción útil cada día.</p></div></article>
+            <article class="game-concept"><span class="concept-visual medal">🏅</span><div><small>LOGROS</small><h3>Momentos especiales</h3><p>Reconocen hitos como tus primeros pasos, una racha o el desarrollo de un asociado.</p></div></article>
+            <article class="game-concept"><span class="concept-visual profile-bars-art"><i></i><i></i><i></i><i></i><i></i></span><div><small>PERFILES</small><h3>Bonos de estrategia</h3><p>No cambian tus puntos: personalizan el tipo de acciones que mejor aprovechan tus fortalezas.</p></div></article>
+            <article class="game-concept"><span class="concept-visual trophy">🏆</span><div><small>METAS</small><h3>Tu destino visible</h3><p>Las barras muestran cuánto has avanzado hacia prospectos, ventas, contactos y aprendizaje.</p></div></article>
+          </div>
+        </section>
+
+        <section class="guide-section" id="guideCrm">
+          <div class="guide-section-head"><div><span class="mini-kicker">CENTRO DE DESARROLLO</span><h2>Cómo usar el CRM sin perder el lado humano</h2><p>Un contacto no es solo una fila: es una relación con contexto, interés y un siguiente paso.</p></div><span class="section-number">03</span></div>
+          <div class="crm-flow-panel">
+            <div class="crm-flow-head"><div><small>EL VIAJE DE UNA RELACIÓN</small><h3>Del primer contacto al liderazgo</h3></div><button class="primary-button" data-go-view="contacts">Abrir Mi red</button></div>
+            <div class="crm-pipeline">
+              <div class="pipeline-stage stage-prospect"><span>1</span><strong>Prospecto</strong><small>Nuevo → Contactado → Presentación → Seguimiento</small></div>
+              <b class="pipeline-arrow">→</b>
+              <div class="pipeline-stage stage-client"><span>2</span><strong>Cliente</strong><small>Compra → Recompra → Testimonio → Referidos</small></div>
+              <b class="pipeline-arrow">→</b>
+              <div class="pipeline-stage stage-associate"><span>3</span><strong>Asociado</strong><small>Activación → Capacitación → Avance → Liderazgo</small></div>
+            </div>
+          </div>
+          <div class="crm-how-grid">
+            <article class="panel how-card"><span class="how-number">01</span><i>＋</i><h3>Registra a la persona</h3><p>Usa <b>Nuevo contacto</b>. Guarda su tipo, interés, fuente, necesidades y fecha del próximo paso.</p><small>PREMIO · +25 XP</small></article>
+            <article class="panel how-card"><span class="how-number">02</span><i>◎</i><h3>Escucha y toma notas</h3><p>Registra información útil: objetivo, perfil de salud, canal preferido y lo que no debes olvidar.</p><small>CLAVE · CONTEXTO</small></article>
+            <article class="panel how-card"><span class="how-number">03</span><i>→</i><h3>Haz avanzar la etapa</h3><p>La flecha al final de la fila mueve a la persona a la siguiente etapa del seguimiento.</p><small>CLAVE · VISIBILIDAD</small></article>
+            <article class="panel how-card"><span class="how-number">04</span><i>⌁</i><h3>Define el siguiente paso</h3><p>Nunca cierres una conversación sin una acción y una fecha claras para continuar.</p><small>CLAVE · CONSTANCIA</small></article>
+          </div>
+          <div class="field-anatomy panel">
+            <div class="contact-demo"><span class="demo-avatar">AR</span><div><strong>Ana Robles</strong><small>Prospecto · Interés alto</small></div><em>Presentación</em></div>
+            <div class="anatomy-lines">
+              <div><span>Perfil de salud</span><strong>Te ayuda a recomendar con empatía.</strong></div>
+              <div><span>Notas</span><strong>Conservan detalles importantes de la relación.</strong></div>
+              <div><span>Próxima acción</span><strong>Convierte la intención en seguimiento real.</strong></div>
+              <div><span>Próxima fecha</span><strong>Evita que una oportunidad se enfríe.</strong></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="guide-section" id="guideProfiles">
+          <div class="guide-section-head"><div><span class="mini-kicker">CONOCIMIENTO PERSONAL</span><h2>Cinco perfiles, cinco formas de avanzar</h2><p>El test no pone etiquetas. Te ayuda a elegir acciones que se sientan naturales y a usar tus fortalezas para apoyar lo que más te cuesta.</p></div><span class="section-number">04</span></div>
+          <div class="profile-guide-visual">
+            <img src="/assets/profiles-compass.png" alt="Ilustración circular con los cinco perfiles de BRÚJULA">
+            <div class="profile-manual-list">
+              <article style="--profile-color:#ef5f86"><span>⌕</span><div><strong>Analista</strong><small>Comprender e investigar</small><p>Usa datos, estudios y contenido educativo para generar confianza.</p></div></article>
+              <article style="--profile-color:#f49a2f"><span>⚡</span><div><strong>Ejecutor</strong><small>Actuar y experimentar</small><p>Avanza con demostraciones, contactos diarios y nuevas estrategias.</p></div></article>
+              <article style="--profile-color:#7755c7"><span>♡</span><div><strong>Conexión</strong><small>Relacionarse y escuchar</small><p>Crea confianza, seguimiento cercano, comunidad y referidos.</p></div></article>
+              <article style="--profile-color:#55a85b"><span>✓</span><div><strong>Constancia</strong><small>Organizar y sostener</small><p>Convierte la agenda, los indicadores y los procesos en hábitos.</p></div></article>
+              <article style="--profile-color:#2878d0"><span>♢</span><div><strong>Liderazgo</strong><small>Inspirar y desarrollar</small><p>Forma equipos, acompaña a otros y multiplica líderes.</p></div></article>
+            </div>
+          </div>
+          <div class="profile-cta"><div><span>✣</span><p><strong>Tu perfil tiene dos partes.</strong> En <b>Editar mis datos</b> cambias nombre, género visual, contacto, propósito y meta. El test actualiza tus fortalezas y entrega 75 XP.</p></div><button class="primary-button" id="openAccountProfileGuide">Editar mi perfil</button></div>
+        </section>
+
+        <section class="guide-section" id="guideWeek">
+          <div class="guide-section-head"><div><span class="mini-kicker">PLAN DE ARRANQUE</span><h2>Tu primera semana en BRÚJULA</h2><p>Marca cada paso al completarlo. Esta lista es personal y se guarda solamente en este equipo.</p></div><div class="week-progress-badge"><strong id="guideChecklistPercent">0%</strong><small>COMPLETADO</small></div></div>
+          <div class="week-plan">
+            <div class="week-progress-track"><span id="guideChecklistBar"></span></div>
+            <div class="week-checklist" id="guideChecklist">
+              <label><input type="checkbox" data-guide-task="purpose"><span><i>DÍA 1</i><strong>Escribe tu propósito</strong><small>Define por qué inicias y qué cambiará cuando tengas éxito.</small></span><button type="button" data-go-view="profile">Abrir →</button></label>
+              <label><input type="checkbox" data-guide-task="profile"><span><i>DÍA 1</i><strong>Descubre tu perfil</strong><small>Responde el test y revisa tus cinco fortalezas.</small></span><button type="button" data-go-view="profile">Abrir →</button></label>
+              <label><input type="checkbox" data-guide-task="contacts"><span><i>DÍA 2</i><strong>Crea tus primeros contactos</strong><small>Empieza con cinco personas y asigna un siguiente paso.</small></span><button type="button" data-go-view="contacts">Abrir →</button></label>
+              <label><input type="checkbox" data-guide-task="mission"><span><i>DÍA 3</i><strong>Completa tres misiones</strong><small>Haz llamadas, comparte contenido y actualiza el CRM.</small></span><button type="button" data-go-view="agenda">Abrir →</button></label>
+              <label><input type="checkbox" data-guide-task="measure"><span><i>DÍA 4</i><strong>Registra tus indicadores</strong><small>Anota prospectos, presentaciones, ventas y productos.</small></span><button type="button" data-go-view="measure">Abrir →</button></label>
+              <label><input type="checkbox" data-guide-task="map"><span><i>DÍA 5</i><strong>Revisa tu mapa</strong><small>Compara el avance actual con tus metas.</small></span><button type="button" data-go-view="map">Abrir →</button></label>
+              <label><input type="checkbox" data-guide-task="growth"><span><i>DÍA 7</i><strong>Elige una ruta de desarrollo</strong><small>Refuerza una fortaleza o trabaja un área de oportunidad.</small></span><button type="button" data-go-view="development">Abrir →</button></label>
+            </div>
+            <div class="week-celebration" id="weekCelebration"><span>🏆</span><div><small>INSIGNIA DE INICIO</small><strong>Primera expedición</strong><p>Completa los siete pasos para dominar la rutina esencial.</p></div></div>
+          </div>
+        </section>
+
+        <section class="guide-section" id="guideFaq">
+          <div class="guide-section-head"><div><span class="mini-kicker">DUDAS FRECUENTES</span><h2>Respuestas rápidas</h2><p>Lo esencial para trabajar con confianza y cuidar tu información.</p></div><span class="section-number">06</span></div>
+          <div class="faq-grid">
+            <details open><summary>¿Dónde se guarda mi información?<span>＋</span></summary><p>En la base SQLite local <b>data/brujula.db</b>. Tus contactos, tareas, métricas y perfil permanecen en este equipo.</p></details>
+            <details><summary>¿Pierdo mis XP cuando subo de nivel?<span>＋</span></summary><p>No. La experiencia es acumulativa. Cada 250 XP aumenta tu nivel y la barra comienza el tramo hacia el siguiente.</p></details>
+            <details><summary>¿Qué diferencia hay entre misión, meta y ruta?<span>＋</span></summary><p>Una <b>misión</b> es una acción de hoy; una <b>meta</b> es un resultado medible; una <b>ruta</b> desarrolla una habilidad a lo largo del tiempo.</p></details>
+            <details><summary>¿Puedo buscar solo clientes o asociados?<span>＋</span></summary><p>Sí. En <b>Mi red</b> usa los filtros Todos, Prospectos, Clientes o Asociados; también puedes buscar por nombre, etapa o nota.</p></details>
+            <details><summary>¿Cómo cambio mi nombre o las ilustraciones?<span>＋</span></summary><p>Presiona tu nombre al final del menú lateral o <b>Editar mis datos</b> en Mi brújula. Elige Mujer, Hombre o Sin avatar; al guardar se adaptan el tablero, el mapa y tu resultado visual.</p></details>
+            <details><summary>¿Cómo respaldo todo el CRM?<span>＋</span></summary><p>Cierra la aplicación y copia el archivo <b>data/brujula.db</b> a una carpeta segura. Ese archivo contiene tus datos.</p></details>
+            <details><summary>¿El simulador modifica mis puntos?<span>＋</span></summary><p>No. El simulador de esta guía solo sirve para comprender los niveles. Tus XP reales cambian únicamente con las acciones indicadas arriba.</p></details>
+          </div>
+          <div class="manual-finish"><span class="manual-finish-art">🧭</span><div><span class="mini-kicker">YA CONOCES EL CAMINO</span><h2>Descubre tus fortalezas. Traza tu rumbo. Alcanza tu meta.</h2><p>Vuelve a esta guía cuando necesites recordar una regla o explicar BRÚJULA a una persona nueva.</p></div><button class="light-button" data-go-view="dashboard">Empezar mi día →</button></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="contactDialog" class="modal">
+    <form id="contactForm" method="dialog">
+      <div class="modal-head"><div><span class="mini-kicker">NUEVA RELACIÓN</span><h2>Agregar a mi red</h2></div><button type="button" data-close-modal aria-label="Cerrar">×</button></div>
+      <div class="form-grid">
+        <label class="span-2"><span>Nombre completo *</span><input name="name" required placeholder="Ej. Sofía Hernández"></label>
+        <label><span>Tipo</span><select name="kind"><option>Prospecto</option><option>Cliente</option><option>Asociado</option></select></label>
+        <label><span>Interés</span><select name="interest"><option>Alto</option><option selected>Medio</option><option>Bajo</option></select></label>
+        <label><span>Etapa</span><select name="stage"><option>Nuevo</option><option>Contactado</option><option>Presentación</option><option>Seguimiento</option><option>Cierre</option></select></label>
+        <label><span>Fuente</span><select name="source"><option>En persona</option><option>Referido</option><option>Facebook</option><option>Instagram</option><option>Evento</option><option>Café virtual</option></select></label>
+        <label><span>Teléfono</span><input name="phone" type="tel" placeholder="656 000 0000"></label>
+        <label><span>Próxima fecha</span><input name="next_action_date" type="date" value="2026-07-23"></label>
+        <label class="span-2"><span>Perfil de salud / interés</span><input name="health_profile" placeholder="¿Qué necesita o qué desea lograr?"></label>
+        <label class="span-2"><span>Próxima acción</span><input name="next_action" placeholder="Ej. Enviar testimonio y agendar café"></label>
+        <label class="span-2"><span>Notas</span><textarea name="notes" rows="3" placeholder="Detalles que te ayudarán a conectar mejor..."></textarea></label>
+      </div>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close-modal>Cancelar</button><button type="submit" class="primary-button">Guardar contacto +25 XP</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="quizDialog" class="modal quiz-modal">
+    <form id="quizForm" method="dialog">
+      <div class="modal-head"><div><span class="mini-kicker">TEST DE PERFIL</span><h2>¿Cómo construyes tu negocio?</h2></div><button type="button" data-close-quiz aria-label="Cerrar">×</button></div>
+      <p class="quiz-intro">Responde del 1 (nunca) al 5 (siempre). Esta versión rápida actualiza tu brújula.</p>
+      <div id="quizQuestions" class="quiz-questions"></div>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close-quiz>Ahora no</button><button type="submit" class="primary-button">Descubrir mi perfil +75 XP</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="profileDialog" class="modal profile-edit-modal">
+    <form id="profileForm" method="dialog">
+      <div class="modal-head"><div><span class="mini-kicker">MI IDENTIDAD EN BRÚJULA</span><h2>Editar mi perfil</h2><p>Personaliza tus datos, tu meta y la forma en que te representa la experiencia.</p></div><button type="button" data-close-profile aria-label="Cerrar">×</button></div>
+      <div class="profile-editor-layout">
+        <aside class="profile-preview-card">
+          <img id="profileEditPreview" src="/assets/profile-result.png" alt="Vista previa de la experiencia visual seleccionada">
+          <div><small>VISTA PREVIA</small><strong id="profilePreviewName">Tu nombre</strong><span id="profileDominantReadout">Perfil dominante</span></div>
+          <p>Las ilustraciones del tablero, tu mapa y tu brújula cambian automáticamente.</p>
+        </aside>
+        <div class="profile-fields">
+          <label class="profile-field"><span>Nombre completo *</span><input name="name" required maxlength="120" autocomplete="name" placeholder="¿Cómo quieres que te llamemos?"></label>
+          <fieldset class="gender-fieldset">
+            <legend>Representación visual</legend>
+            <p>Elige la opción que quieras ver en las ilustraciones.</p>
+            <div class="gender-options">
+              <label><input type="radio" name="gender" value="female"><span><b>👩</b><strong>Mujer</strong><small>Avatar femenino</small></span></label>
+              <label><input type="radio" name="gender" value="male"><span><b>👨</b><strong>Hombre</strong><small>Avatar masculino</small></span></label>
+              <label><input type="radio" name="gender" value="neutral"><span><b>🧭</b><strong>Sin avatar</strong><small>Ilustración neutral</small></span></label>
+            </div>
+          </fieldset>
+          <div class="profile-two-columns">
+            <label class="profile-field"><span>Correo</span><input name="email" type="email" maxlength="160" autocomplete="email" placeholder="nombre@correo.com"></label>
+            <label class="profile-field"><span>Teléfono</span><input name="phone" type="tel" maxlength="40" autocomplete="tel" placeholder="656 000 0000"></label>
+          </div>
+          <label class="profile-field"><span>Ciudad</span><input name="city" maxlength="100" autocomplete="address-level2" placeholder="Ej. Ciudad Juárez, Chihuahua"></label>
+          <label class="profile-field"><span>Mi propósito</span><textarea name="purpose" rows="3" maxlength="800" placeholder="¿Qué quieres construir y por qué es importante para ti?"></textarea></label>
+          <div class="profile-two-columns">
+            <label class="profile-field"><span>Meta mensual (MXN)</span><input name="target_income" type="number" min="0" step="100" placeholder="35000"></label>
+            <label class="profile-field"><span>Fecha objetivo</span><input name="goal_date" type="date"></label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions profile-modal-actions"><span>🔒 Tus datos se guardan únicamente en este equipo.</span><div><button type="button" class="secondary-button" data-close-profile>Cancelar</button><button type="submit" class="primary-button">Guardar mi perfil</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog id="tourDialog" class="modal tour-modal">
+    <div class="tour-shell">
+      <div class="tour-top"><span class="mini-kicker">RECORRIDO GUIADO</span><button type="button" id="closeTour" aria-label="Cerrar recorrido">×</button></div>
+      <div class="tour-progress"><span id="tourProgressBar"></span></div>
+      <div class="tour-scene" id="tourScene"></div>
+      <div class="tour-controls"><button type="button" class="secondary-button" id="tourPrevious">← Anterior</button><span id="tourCounter">1 de 7</span><button type="button" class="primary-button" id="tourNext">Siguiente →</button></div>
+    </div>
+  </dialog>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
