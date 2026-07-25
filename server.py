@@ -20,8 +20,8 @@ DB_PATH = ROOT / "data" / "brujula.db"
 WEB_DIR = ROOT / "web"
 PUBLIC_DIR = ROOT / "public"
 
-TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL")
-TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN")
+TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "").strip() or None
+TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip() or None
 USE_TURSO = bool(TURSO_DATABASE_URL)
 
 if USE_TURSO:
