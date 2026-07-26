@@ -244,19 +244,23 @@
               <div class="panel-head"><div><span class="mini-kicker">FUENTES DE XP</span><h3>Acciones que sí dan puntos</h3></div><span class="soft-chip">REGLAS ACTUALES</span></div>
               <div class="xp-chart">
                 <div class="xp-chart-row"><span class="xp-action-icon profile">✣</span><div><strong>Completar test de perfil</strong><i><b style="--xp-width:100%"></b></i></div><em>+75 XP</em></div>
-                <div class="xp-chart-row"><span class="xp-action-icon mission">✓</span><div><strong>Completar una misión</strong><i><b style="--xp-width:53%"></b></i></div><em>+20 a 40 XP</em></div>
+                <div class="xp-chart-row"><span class="xp-action-icon mission">✓</span><div><strong>Completar una misión</strong><i><b style="--xp-width:53%"></b></i></div><em>según la misión</em></div>
                 <div class="xp-chart-row"><span class="xp-action-icon contact">♙</span><div><strong>Agregar un contacto</strong><i><b style="--xp-width:33%"></b></i></div><em>+25 XP</em></div>
                 <div class="xp-chart-row"><span class="xp-action-icon metric">↗</span><div><strong>Guardar el avance diario</strong><i><b style="--xp-width:20%"></b></i></div><em>+15 XP</em></div>
               </div>
-              <div class="truth-note"><span>ⓘ</span><p>Avanzar la etapa de un contacto y consultar pantallas ayuda a tu proceso, pero actualmente no suma XP.</p></div>
+              <div class="truth-note"><span>ⓘ</span><p>Cada misión vale los puntos que tenga asignados: las de ejemplo dan entre 20 y 40 XP, y al crear una tuya eliges cuántos vale (de 0 a 500). Si desmarcas una misión, esos puntos se descuentan. Avanzar la etapa de un contacto, editar, eliminar y consultar pantallas ayudan a tu proceso, pero no suman XP.</p></div>
             </article>
           </div>
           <div class="game-concepts">
-            <article class="game-concept"><span class="concept-visual fire">🔥<i>9</i></span><div><small>RACHA</small><h3>La fuerza de volver</h3><p>Representa la continuidad de tu trabajo. La meta es mantener una acción útil cada día.</p></div></article>
-            <article class="game-concept"><span class="concept-visual medal">🏅</span><div><small>LOGROS</small><h3>Momentos especiales</h3><p>Reconocen hitos como tus primeros pasos, una racha o el desarrollo de un asociado.</p></div></article>
+            <article class="game-concept"><span class="concept-visual fire">🔥<i id="guideStreakNumber">0</i></span><div><small>RACHA</small><h3>La fuerza de volver</h3><p>Cuenta los días seguidos en que guardaste tu avance en <b>Medir avances</b>. Si te saltas un día, vuelve a empezar; si aún no registras hoy, la racha sigue viva hasta el final del día.</p></div></article>
+            <article class="game-concept"><span class="concept-visual medal">🏅</span><div><small>LOGROS</small><h3>Momentos especiales</h3><p>Son <b id="guideAchievementTotal">7</b> insignias que se desbloquean solas en cuanto cumples su condición. Las ves al final de <b>Mi tablero</b>, y te avisamos con una notificación al ganarlas.</p></div></article>
             <article class="game-concept"><span class="concept-visual profile-bars-art"><i></i><i></i><i></i><i></i><i></i></span><div><small>PERFILES</small><h3>Bonos de estrategia</h3><p>No cambian tus puntos: personalizan el tipo de acciones que mejor aprovechan tus fortalezas.</p></div></article>
-            <article class="game-concept"><span class="concept-visual trophy">🏆</span><div><small>METAS</small><h3>Tu destino visible</h3><p>Las barras muestran cuánto has avanzado hacia prospectos, ventas, contactos y aprendizaje.</p></div></article>
+            <article class="game-concept"><span class="concept-visual trophy">🏆</span><div><small>METAS</small><h3>Tu destino visible</h3><p>Las barras muestran cuánto has avanzado hacia prospectos, ventas, contactos y aprendizaje. La meta de ventas se actualiza sola con lo que registras cada día.</p></div></article>
           </div>
+          <article class="panel guide-achievements">
+            <div class="panel-head"><div><span class="mini-kicker">CATÁLOGO</span><h3>Cómo se gana cada logro</h3></div><span class="soft-chip" id="guideAchievementProgress">0 de 0</span></div>
+            <div class="guide-achievement-list" id="guideAchievementList"></div>
+          </article>
         </section>
 
         <section class="guide-section" id="guideCrm">
@@ -274,9 +278,10 @@
           <div class="crm-how-grid">
             <article class="panel how-card"><span class="how-number">01</span><i>＋</i><h3>Registra a la persona</h3><p>Usa <b>Nuevo contacto</b>. Guarda su tipo, interés, fuente, necesidades y fecha del próximo paso.</p><small>PREMIO · +25 XP</small></article>
             <article class="panel how-card"><span class="how-number">02</span><i>◎</i><h3>Escucha y toma notas</h3><p>Registra información útil: objetivo, perfil de salud, canal preferido y lo que no debes olvidar.</p><small>CLAVE · CONTEXTO</small></article>
-            <article class="panel how-card"><span class="how-number">03</span><i>→</i><h3>Haz avanzar la etapa</h3><p>La flecha al final de la fila mueve a la persona a la siguiente etapa del seguimiento.</p><small>CLAVE · VISIBILIDAD</small></article>
+            <article class="panel how-card"><span class="how-number">03</span><i>→</i><h3>Haz avanzar la etapa</h3><p>Al final de cada fila tienes tres acciones: <b>→</b> mueve a la persona a la siguiente etapa, <b>✎</b> abre sus datos para corregirlos y <b>🗑</b> la elimina de tu red.</p><small>CLAVE · VISIBILIDAD</small></article>
             <article class="panel how-card"><span class="how-number">04</span><i>⌁</i><h3>Define el siguiente paso</h3><p>Nunca cierres una conversación sin una acción y una fecha claras para continuar.</p><small>CLAVE · CONSTANCIA</small></article>
           </div>
+          <div class="route-tip"><span>🗑</span><div><strong>Eliminar es definitivo</strong><p>Antes de borrar una persona o una misión te pedimos confirmación, porque no hay forma de recuperarla. Si quieres conservar una copia de todo, usa <b>Descargar respaldo</b> en las dudas frecuentes.</p></div><button data-guide-section="guideFaq">Ir al respaldo →</button></div>
           <div class="field-anatomy panel">
             <div class="contact-demo"><span class="demo-avatar">AR</span><div><strong>Ana Robles</strong><small>Prospecto · Interés alto</small></div><em>Presentación</em></div>
             <div class="anatomy-lines">
@@ -284,6 +289,8 @@
               <div><span>Notas</span><strong>Conservan detalles importantes de la relación.</strong></div>
               <div><span>Próxima acción</span><strong>Convierte la intención en seguimiento real.</strong></div>
               <div><span>Próxima fecha</span><strong>Evita que una oportunidad se enfríe.</strong></div>
+              <div><span>Correo y teléfono</span><strong>Te permiten retomar el contacto por su canal preferido.</strong></div>
+              <div><span>Cumpleaños</span><strong>Una felicitación a tiempo mantiene viva la relación.</strong></div>
             </div>
           </div>
         </section>
@@ -304,14 +311,14 @@
         </section>
 
         <section class="guide-section" id="guideWeek">
-          <div class="guide-section-head"><div><span class="mini-kicker">PLAN DE ARRANQUE</span><h2>Tu primera semana en BRÚJULA</h2><p>Marca cada paso al completarlo. Esta lista es personal y se guarda solamente en este equipo.</p></div><div class="week-progress-badge"><strong id="guideChecklistPercent">0%</strong><small>COMPLETADO</small></div></div>
+          <div class="guide-section-head"><div><span class="mini-kicker">PLAN DE ARRANQUE</span><h2>Tu primera semana en BRÚJULA</h2><p>Marca cada paso al completarlo. A diferencia del resto de la aplicación, esta lista se guarda únicamente en este navegador: si entras desde otro dispositivo, empezará en blanco.</p></div><div class="week-progress-badge"><strong id="guideChecklistPercent">0%</strong><small>COMPLETADO</small></div></div>
           <div class="week-plan">
             <div class="week-progress-track"><span id="guideChecklistBar"></span></div>
             <div class="week-checklist" id="guideChecklist">
               <label><input type="checkbox" data-guide-task="purpose"><span><i>DÍA 1</i><strong>Escribe tu propósito</strong><small>Define por qué inicias y qué cambiará cuando tengas éxito.</small></span><button type="button" data-go-view="profile">Abrir →</button></label>
               <label><input type="checkbox" data-guide-task="profile"><span><i>DÍA 1</i><strong>Descubre tu perfil</strong><small>Responde el test y revisa tus cinco fortalezas.</small></span><button type="button" data-go-view="profile">Abrir →</button></label>
               <label><input type="checkbox" data-guide-task="contacts"><span><i>DÍA 2</i><strong>Crea tus primeros contactos</strong><small>Empieza con cinco personas y asigna un siguiente paso.</small></span><button type="button" data-go-view="contacts">Abrir →</button></label>
-              <label><input type="checkbox" data-guide-task="mission"><span><i>DÍA 3</i><strong>Completa tres misiones</strong><small>Haz llamadas, comparte contenido y actualiza el CRM.</small></span><button type="button" data-go-view="agenda">Abrir →</button></label>
+              <label><input type="checkbox" data-guide-task="mission"><span><i>DÍA 3</i><strong>Crea y completa tres misiones</strong><small>Usa <b>Nueva misión</b> para planear tus llamadas y contenido, y márcalas al terminar.</small></span><button type="button" data-go-view="agenda">Abrir →</button></label>
               <label><input type="checkbox" data-guide-task="measure"><span><i>DÍA 4</i><strong>Registra tus indicadores</strong><small>Anota prospectos, presentaciones, ventas y productos.</small></span><button type="button" data-go-view="measure">Abrir →</button></label>
               <label><input type="checkbox" data-guide-task="map"><span><i>DÍA 5</i><strong>Revisa tu mapa</strong><small>Compara el avance actual con tus metas.</small></span><button type="button" data-go-view="map">Abrir →</button></label>
               <label><input type="checkbox" data-guide-task="growth"><span><i>DÍA 7</i><strong>Elige una ruta de desarrollo</strong><small>Refuerza una fortaleza o trabaja un área de oportunidad.</small></span><button type="button" data-go-view="development">Abrir →</button></label>
@@ -326,6 +333,10 @@
             <details open><summary>¿Dónde se guarda mi información?<span>＋</span></summary><p>Depende de cómo abras BRÚJULA. En tu computadora los datos viven en el archivo local <b>data/brujula.db</b>; en la versión publicada en internet se guardan en una base de datos en la nube (Turso) vinculada a esta aplicación. Puedes confirmar cuál estás usando en <b id="faqStorageMode">/api/health</b>.</p></details>
             <details><summary>¿Pierdo mis XP cuando subo de nivel?<span>＋</span></summary><p>No. La experiencia es acumulativa. Cada 250 XP aumenta tu nivel y la barra comienza el tramo hacia el siguiente.</p></details>
             <details><summary>¿Qué diferencia hay entre misión, meta y ruta?<span>＋</span></summary><p>Una <b>misión</b> es una acción de hoy; una <b>meta</b> es un resultado medible; una <b>ruta</b> desarrolla una habilidad a lo largo del tiempo.</p></details>
+            <details><summary>¿Puedo crear mis propias misiones?<span>＋</span></summary><p>Sí. En <b>Agenda de hoy</b> usa el botón <b>＋ Nueva misión</b>: eliges el título, la categoría, el perfil, la fecha, la hora y cuántos XP vale. Con <b>✎</b> la editas y con <b>🗑</b> la eliminas.</p></details>
+            <details><summary>¿Puedo corregir o borrar algo que registré mal?<span>＋</span></summary><p>Sí. Tanto en <b>Mi red</b> como en <b>Agenda de hoy</b> cada elemento tiene un botón para editar (<b>✎</b>) y otro para eliminar (<b>🗑</b>). Al eliminar te pedimos confirmación, porque no se puede deshacer.</p></details>
+            <details><summary>¿Cómo se calcula mi racha?<span>＋</span></summary><p>Son los días seguidos en que guardaste tu avance en <b>Medir avances</b>. No depende de completar misiones. Si te saltas un día completo, la cuenta vuelve a cero; mientras el día siga en curso, tu racha se mantiene aunque todavía no registres.</p></details>
+            <details><summary>¿Por qué a veces tarda en abrir la primera vez?<span>＋</span></summary><p>La versión publicada usa un servidor gratuito que se suspende tras un rato sin visitas. El primer acceso lo despierta y puede tardar hasta un minuto; verás el aviso “Despertando el servidor”. Las siguientes pantallas cargan de inmediato.</p></details>
             <details><summary>¿Puedo buscar solo clientes o asociados?<span>＋</span></summary><p>Sí. En <b>Mi red</b> usa los filtros Todos, Prospectos, Clientes o Asociados; también puedes buscar por nombre, etapa o nota.</p></details>
             <details><summary>¿Cómo cambio mi nombre o las ilustraciones?<span>＋</span></summary><p>Presiona tu nombre al final del menú lateral o <b>Editar mis datos</b> en Mi brújula. Elige Mujer, Hombre o Sin avatar; al guardar se adaptan el tablero, el mapa y tu resultado visual.</p></details>
             <details><summary>¿Cómo respaldo todo el CRM?<span>＋</span></summary><p>Usa el botón <b>Descargar respaldo</b> de abajo: genera un archivo JSON con tus contactos, misiones, métricas, metas y perfil. Funciona igual en la versión local y en la publicada.</p><button class="secondary-button" id="downloadBackup" type="button">⬇ Descargar respaldo</button></details>

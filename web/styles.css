@@ -270,6 +270,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .week-dots i.future { opacity:.45; }.week-dots i.current { box-shadow:0 0 0 2px var(--purple); }
 .faq-grid details .secondary-button { margin:0 18px 17px; }
 
+.guide-achievements { margin-top:19px; }
+.guide-achievement-list { display:grid; grid-template-columns:repeat(2,1fr); gap:11px; margin-top:16px; }
+.guide-achievement { display:grid; grid-template-columns:38px 1fr auto; gap:12px; align-items:center; padding:13px 15px; border:1px solid var(--line); border-radius:13px; background:#fafbfe; }
+.guide-achievement.unlocked { background:#fff; border-color:#f0e3bd; }
+.guide-achievement > span { width:38px; height:38px; display:grid; place-items:center; border-radius:12px; background:var(--purple-soft); font-size:18px; }
+.guide-achievement.unlocked > span { background:linear-gradient(135deg,#fff2cf,#ffe08a); }
+.guide-achievement strong { display:block; color:var(--navy-900); font-size:11px; }
+.guide-achievement p { margin:3px 0 0; color:var(--muted); font-size:9px; line-height:1.5; }
+.guide-achievement em { color:#9aa3b7; font-size:8px; font-style:normal; font-weight:850; letter-spacing:.08em; text-transform:uppercase; }
+.guide-achievement.unlocked em { color:#c2921f; }
+
 /* Estados de carga, validación y confirmación */
 .spinner { width:14px; height:14px; display:inline-block; border:2px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; vertical-align:-2px; }
 button.is-loading { position:relative; opacity:.75; cursor:progress; }
@@ -315,7 +326,7 @@ button:disabled { opacity:.6; cursor:not-allowed; }
 @media (max-width: 700px) {
   .main-content { padding:0 14px 40px; }.topbar { height:92px; }.topbar h1 { font-size:21px; }.eyebrow { font-size:8px; }.xp-pill,.icon-button,.top-actions .primary-button { display:none; }
   .hero-card { min-height:470px; background-position:60% center; }.hero-overlay { background:linear-gradient(0deg,rgba(17,25,50,.94),rgba(17,25,50,.35)); }.hero-copy { width:100%; padding:180px 24px 25px; }.hero-copy h2 { font-size:34px; }.hero-medal { right:20px; top:24px; bottom:auto; }
-  .achievement-strip { grid-template-columns:1fr; }.agenda-intro-actions { width:100%; flex-direction:column; align-items:stretch; }.agenda-intro-actions .primary-button { width:100%; }
+  .achievement-strip { grid-template-columns:1fr; }.guide-achievement-list { grid-template-columns:1fr; }.agenda-intro-actions { width:100%; flex-direction:column; align-items:stretch; }.agenda-intro-actions .primary-button { width:100%; }
   .section-heading { align-items:center; }.section-heading h2 { font-size:20px; }.stat-grid { grid-template-columns:1fr 1fr; gap:10px; }.stat-card { padding:15px 12px; }.stat-card strong { font-size:20px; }.stat-icon { width:38px; height:38px; }.spark { display:none; }
   .people-strip { grid-template-columns:1fr; }.page-intro { min-height:115px; align-items:end; }.page-intro .primary-button { padding:0 12px; }.contact-summary { grid-template-columns:1fr 1fr 1fr; }.summary-card { padding:12px; }.summary-card > span { display:none; }.contact-toolbar { display:grid; }.search-box { width:100%; }.filter-tabs { overflow:auto; }.contact-table-wrap { display:none; }.mobile-contact-list { display:grid; padding:12px; gap:10px; }.mobile-contact-card { padding:14px; border:1px solid var(--line); border-radius:14px; }.mobile-contact-card .person-top { margin-bottom:10px; }.mobile-contact-meta { display:flex; gap:6px; flex-wrap:wrap; }.mobile-contact-card p { margin:10px 0 0; font-size:10px; color:var(--muted); }
   .agenda-side { grid-template-columns:1fr; }.timeline-panel { padding:17px 13px; }.timeline-item { grid-template-columns:42px 28px 1fr; }.timeline-item::after { left:55px; }.timeline-actions { grid-column:3; justify-content:flex-end; }.journey-card { height:580px; }.journey-copy { top:24px; left:24px; }.journey-copy h3 { font-size:26px; }.node span { display:none; }.node i { width:43px; height:43px; }.goal-grid,.learning-grid { grid-template-columns:1fr; }.measure-layout { display:block; }.report-panel { margin-top:15px; }.number-grid { grid-template-columns:1fr 1fr; }.sales-chart { gap:8px; padding-inline:4px; }.profile-guide { grid-template-columns:1fr; }.profile-guide img { max-height:280px; object-fit:contain; }.learning-hero { padding:30px 24px; }.learning-hero h3 { font-size:28px; }.learning-orb { display:none; }

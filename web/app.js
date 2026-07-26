@@ -412,9 +412,22 @@ function updateXpSimulator(value) {
   $("#simulatorEnd").textContent = `Nivel ${level + 1}`;
 }
 
+function renderGuideAchievements(achievements = []) {
+  const desbloqueados = achievements.filter((item) => item.unlocked_at).length;
+  $("#guideAchievementTotal").textContent = achievements.length;
+  $("#guideAchievementProgress").textContent = `${desbloqueados} de ${achievements.length}`;
+  $("#guideAchievementList").innerHTML = achievements.map((item) => `
+    <div class="guide-achievement ${item.unlocked_at ? "unlocked" : ""}">
+      <span>${item.unlocked_at ? item.icon : "🔒"}</span>
+      <div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.description)}</p></div>
+      <em>${item.unlocked_at ? "Conseguido" : "Pendiente"}</em>
+    </div>`).join("");
+}
+
 function updateGuideWithUser(user) {
   $("#guideHeroLevel").textContent = user.level;
   $("#guideHeroStreak").textContent = user.streak;
+  $("#guideStreakNumber").textContent = user.streak;
   const simulator = $("#xpSimulator");
   simulator.max = Math.max(5000, Math.ceil((user.xp + 1000) / 250) * 250);
   simulator.value = user.xp;
@@ -446,9 +459,9 @@ function restoreGuideChecklist() {
 }
 
 const tourSteps = [
-  { view: "dashboard", kicker: "PUNTO DE PARTIDA", title: "Mi tablero", icon: "⌂", mini: ["✦", "🔥"], color: "#7755c7", soft: "#f2edff", text: "Tu resumen diario reúne nivel, racha, metas, personas que necesitan atención y las misiones prioritarias.", bullets: ["Revisa tu progreso de nivel", "Empieza por las misiones del día", "Detecta seguimientos urgentes"] },
-  { view: "contacts", kicker: "CENTRO DE DESARROLLO", title: "Mi red", icon: "♙", mini: ["♡", "→"], color: "#ed5f86", soft: "#fff0f4", text: "Aquí acompañas a prospectos, clientes y asociados. Cada registro conserva contexto y un próximo paso.", bullets: ["Agregar una persona da 25 XP", "Filtra por tipo o busca por notas", "Haz avanzar la etapa con la flecha"] },
-  { view: "agenda", kicker: "ACCIÓN DIARIA", title: "Agenda de hoy", icon: "✓", mini: ["☎", "▶"], color: "#2878d0", soft: "#eaf5ff", text: "Las misiones transforman tu estrategia en acciones concretas, adaptadas a tus perfiles y prioridades.", bullets: ["Cada misión indica su premio", "Marca la casilla al terminar", "Las misiones dan entre 20 y 40 XP"] },
+  { view: "dashboard", kicker: "PUNTO DE PARTIDA", title: "Mi tablero", icon: "⌂", mini: ["✦", "🔥"], color: "#7755c7", soft: "#f2edff", text: "Tu resumen diario reúne nivel, racha, metas, personas que necesitan atención, las misiones prioritarias y tus logros.", bullets: ["Revisa tu progreso de nivel", "Empieza por las misiones del día", "Al final verás las insignias que ya ganaste"] },
+  { view: "contacts", kicker: "CENTRO DE DESARROLLO", title: "Mi red", icon: "♙", mini: ["♡", "→"], color: "#ed5f86", soft: "#fff0f4", text: "Aquí acompañas a prospectos, clientes y asociados. Cada registro conserva contexto y un próximo paso.", bullets: ["Agregar una persona da 25 XP", "Filtra por tipo o busca por notas", "Avanza la etapa, edita o elimina desde la fila"] },
+  { view: "agenda", kicker: "ACCIÓN DIARIA", title: "Agenda de hoy", icon: "✓", mini: ["☎", "▶"], color: "#2878d0", soft: "#eaf5ff", text: "Las misiones transforman tu estrategia en acciones concretas. Puedes usar las sugeridas o crear las tuyas.", bullets: ["Crea misiones con “＋ Nueva misión”", "Marca la casilla al terminar", "Tú decides cuántos XP vale cada una"] },
   { view: "map", kicker: "PLANEACIÓN", title: "Mi mapa", icon: "⌁", mini: ["◎", "🏆"], color: "#f49a2f", soft: "#fff5e8", text: "El mapa convierte metas grandes en un sendero visible y muestra el porcentaje de avance de cada objetivo.", bullets: ["Compara avance contra meta", "Detecta el tramo que necesita atención", "Celebra cada estación alcanzada"] },
   { view: "measure", kicker: "RESULTADOS", title: "Medir avances", icon: "↗", mini: ["#", "$"], color: "#55a85b", soft: "#edf8ee", text: "Registra prospectos, presentaciones, clientes, asociados, ventas y productos para aprender de tus resultados.", bullets: ["Guardar el día da 15 XP", "La gráfica muestra los últimos cinco días", "Registrar a diario mejora tus decisiones"] },
   { view: "profile", kicker: "CONOCIMIENTO PERSONAL", title: "Mi brújula", icon: "✣", mini: ["⌕", "♡"], color: "#ef5f86", soft: "#fff0f4", text: "Tu propósito y los cinco perfiles explican cómo trabajas mejor y qué estrategia aprovecha tus fortalezas.", bullets: ["El test rápido tiene diez preguntas", "Completarlo da 75 XP", "Ningún perfil es mejor que otro"] },
@@ -529,6 +542,7 @@ async function loadDashboard() {
     renderGoals(goals);
     renderDevelopment(data.development);
     renderAchievements(data.achievements);
+    renderGuideAchievements(data.achievements);
     renderWeek(data.week_activity);
     updateGuideWithUser(user);
     $("#attentionContacts").innerHTML = data.recent_contacts.map(personCard).join("");
