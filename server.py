@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import mimetypes
 import os
+import re
 import sqlite3
 from datetime import date, datetime, timedelta
 from http import HTTPStatus
@@ -22,6 +24,19 @@ PUBLIC_DIR = ROOT / "public"
 
 MAX_BODY_BYTES = 1_000_000
 
+
+APP_VERSION = "dev"
+
+
+def app_version() -> str:
+    """Huella de los archivos del frontend, para detectar versiones desactualizadas."""
+    marca = hashlib.sha256()
+    for archivo in sorted(WEB_DIR.glob("*")):
+        if archivo.is_file():
+            marca.update(archivo.name.encode())
+            marca.update(str(archivo.stat().st_mtime_ns).encode())
+    return marca.hexdigest()[:12]
+
 TURSO_DATABASE_URL = os.environ.get("TURSO_DATABASE_URL", "").strip() or None
 TURSO_AUTH_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "").strip() or None
 USE_TURSO = bool(TURSO_DATABASE_URL)
@@ -36,6 +51,76 @@ def today() -> str:
 
 def day_offset(days: int) -> str:
     return (date.today() + timedelta(days=days)).isoformat()
+
+
+VALID_KINDS = {"Prospecto", "Cliente", "Asociado"}
+VALID_INTEREST = {"Alto", "Medio", "Bajo"}
+VALID_GENDERS = {"female", "male", "neutral"}
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
+DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+TIME_PATTERN = re.compile(r"^\d{2}:\d{2}$")
+
+
+def clean_text(value, limit: int, label: str, required: bool = False) -> str:
+    text = str(value if value is not None else "").strip()
+    if required and not text:
+        raise ValueError(f"{label} es obligatorio")
+    if len(text) > limit:
+        raise ValueError(f"{label} no puede tener más de {limit} caracteres")
+    return text
+
+
+def clean_choice(value, options: set, label: str, default: str) -> str:
+    text = str(value if value is not None else "").strip() or default
+    if text not in options:
+        raise ValueError(f"{label} debe ser una de estas opciones: {', '.join(sorted(options))}")
+    return text
+
+
+def clean_date(value, label: str):
+    text = str(value if value is not None else "").strip()
+    if not text:
+        return None
+    if not DATE_PATTERN.match(text):
+        raise ValueError(f"{label} debe tener el formato AAAA-MM-DD")
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        raise ValueError(f"{label} no corresponde a una fecha real")
+    return text
+
+
+def clean_time(value, label: str):
+    text = str(value if value is not None else "").strip()
+    if not text:
+        return None
+    if not TIME_PATTERN.match(text):
+        raise ValueError(f"{label} debe tener el formato HH:MM")
+    hours, minutes = (int(part) for part in text.split(":"))
+    if hours > 23 or minutes > 59:
+        raise ValueError(f"{label} no corresponde a una hora real")
+    return text
+
+
+def clean_email(value, label: str = "El correo") -> str:
+    text = clean_text(value, 160, label)
+    if text and not EMAIL_PATTERN.match(text):
+        raise ValueError(f"{label} no tiene un formato válido (ejemplo: nombre@correo.com)")
+    return text
+
+
+def clean_number(value, label: str, minimum: float = 0, maximum: float | None = None) -> float:
+    if value in (None, ""):
+        return minimum
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} debe ser un número")
+    if number < minimum:
+        raise ValueError(f"{label} no puede ser menor que {minimum:g}")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"{label} no puede ser mayor que {maximum:g}")
+    return number
 
 
 SCHEMA_STATEMENTS = [
@@ -523,7 +608,7 @@ class AppHandler(BaseHTTPRequestHandler):
     def handle_api_get(self, parsed) -> None:
         with connect() as db:
             if parsed.path == "/api/health":
-                self.send_json({"ok": True, "database": "turso" if USE_TURSO else "sqlite", "date": today()})
+                self.send_json({"ok": True, "database": "turso" if USE_TURSO else "sqlite", "date": today(), "version": APP_VERSION})
             elif parsed.path == "/api/export":
                 self.export_data(db)
             elif parsed.path == "/api/dashboard":
@@ -553,17 +638,35 @@ class AppHandler(BaseHTTPRequestHandler):
             else:
                 self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
 
+    def contact_fields(self, data: dict) -> dict:
+        """Valida y normaliza los campos de un contacto. Lanza ValueError con un mensaje claro."""
+        return {
+            "name": clean_text(data.get("name"), 120, "El nombre", required=True),
+            "kind": clean_choice(data.get("kind"), VALID_KINDS, "El tipo", "Prospecto"),
+            "interest": clean_choice(data.get("interest"), VALID_INTEREST, "El interés", "Medio"),
+            "stage": clean_text(data.get("stage"), 60, "La etapa") or "Nuevo",
+            "source": clean_text(data.get("source"), 60, "La fuente") or "En persona",
+            "phone": clean_text(data.get("phone"), 40, "El teléfono"),
+            "email": clean_email(data.get("email")),
+            "health_profile": clean_text(data.get("health_profile"), 400, "El perfil de salud"),
+            "estimated_objective": clean_text(data.get("estimated_objective"), 120, "El objetivo"),
+            "products": clean_text(data.get("products"), 200, "El campo de productos"),
+            "monthly_consumption": clean_number(data.get("monthly_consumption"), "El consumo mensual", 0, 10_000_000),
+            "next_action": clean_text(data.get("next_action"), 300, "La próxima acción"),
+            "next_action_date": clean_date(data.get("next_action_date"), "La próxima fecha"),
+            "last_contact": clean_date(data.get("last_contact"), "La fecha del último contacto"),
+            "birthday": clean_date(data.get("birthday"), "El cumpleaños"),
+            "notes": clean_text(data.get("notes"), 1000, "El campo de notas"),
+        }
+
     def create_contact(self) -> None:
-        data = self.read_json()
-        if not data.get("name"):
-            self.send_json({"error": "El nombre es obligatorio"}, HTTPStatus.BAD_REQUEST)
-            return
-        fields = ["name", "kind", "interest", "stage", "source", "phone", "email", "health_profile", "estimated_objective", "products", "monthly_consumption", "next_action", "next_action_date", "last_contact", "birthday", "notes"]
-        defaults = {"kind": "Prospecto", "interest": "Medio", "stage": "Nuevo", "source": "En persona", "monthly_consumption": 0}
-        values = [data.get(field, defaults.get(field, "")) or None for field in fields]
-        values[10] = data.get("monthly_consumption") or 0
+        values = self.contact_fields(self.read_json())
+        columns = list(values)
         with connect() as db:
-            cursor = db.execute(f"INSERT INTO contacts ({','.join(fields)}) VALUES ({','.join('?' for _ in fields)})", values)
+            cursor = db.execute(
+                f"INSERT INTO contacts ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+                [values[column] for column in columns],
+            )
             db.execute("UPDATE users SET xp=xp+25 WHERE id=1")
             contact = fetch_one(db, "SELECT * FROM contacts WHERE id=?", (cursor.lastrowid,))
             unlocked = evaluate_achievements(db)
@@ -574,15 +677,16 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
             return
         data = self.read_json()
-        allowed = {"name", "kind", "interest", "stage", "source", "phone", "email", "health_profile",
-                   "estimated_objective", "products", "monthly_consumption", "next_action",
-                   "next_action_date", "last_contact", "birthday", "notes"}
-        updates = [(key, value) for key, value in data.items() if key in allowed]
+        with connect() as db:
+            actual = fetch_one(db, "SELECT * FROM contacts WHERE id=?", (contact_id,))
+        if not actual:
+            self.send_json({"error": "No encontrado"}, HTTPStatus.NOT_FOUND)
+            return
+        # Validar sobre el contacto completo para no perder campos ni saltarse reglas.
+        limpio = self.contact_fields({**actual, **data})
+        updates = [(key, limpio[key]) for key in data if key in limpio]
         if not updates:
             self.send_json({"error": "No hay cambios válidos"}, HTTPStatus.BAD_REQUEST)
-            return
-        if any(key == "name" and not str(value).strip() for key, value in updates):
-            self.send_json({"error": "El nombre no puede quedar vacío"}, HTTPStatus.BAD_REQUEST)
             return
         with connect() as db:
             db.execute(f"UPDATE contacts SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=?", [value for _, value in updates] + [contact_id])
@@ -601,24 +705,23 @@ class AppHandler(BaseHTTPRequestHandler):
             db.execute(f"DELETE FROM {table} WHERE id=?", (record_id,))
         self.send_json({"ok": True, "message": message})
 
+    def task_fields(self, data: dict) -> dict:
+        return {
+            "title": clean_text(data.get("title"), 160, "El título de la misión", required=True),
+            "detail": clean_text(data.get("detail"), 400, "El detalle"),
+            "category": clean_text(data.get("category"), 60, "La categoría") or "Organización",
+            "profile_tag": clean_text(data.get("profile_tag"), 60, "El perfil") or "Constancia",
+            "points": int(clean_number(data.get("points") if data.get("points") not in (None, "") else 20, "El puntaje", 0, 500)),
+            "due_date": clean_date(data.get("due_date"), "La fecha") or today(),
+            "due_time": clean_time(data.get("due_time"), "La hora"),
+        }
+
     def create_task(self) -> None:
         data = self.read_json()
-        title = str(data.get("title", "")).strip()
-        if not title:
-            self.send_json({"error": "Escribe un título para la misión"}, HTTPStatus.BAD_REQUEST)
-            return
-        try:
-            points = max(0, min(500, int(data.get("points") or 20)))
-        except (TypeError, ValueError):
-            points = 20
+        campos = self.task_fields(data)
         values = (
-            title[:160],
-            str(data.get("detail", "")).strip()[:400],
-            str(data.get("category", "")).strip() or "Organización",
-            str(data.get("profile_tag", "")).strip() or "Constancia",
-            points,
-            str(data.get("due_date", "")).strip() or today(),
-            str(data.get("due_time", "")).strip() or None,
+            campos["title"], campos["detail"], campos["category"], campos["profile_tag"],
+            campos["points"], campos["due_date"], campos["due_time"],
             data.get("contact_id") or None,
         )
         with connect() as db:
@@ -639,8 +742,8 @@ class AppHandler(BaseHTTPRequestHandler):
             if not task:
                 self.send_json({"error": "Misión no encontrada"}, HTTPStatus.NOT_FOUND)
                 return
-            editable = {"title", "detail", "category", "profile_tag", "due_date", "due_time", "points"}
-            updates = [(key, value) for key, value in data.items() if key in editable]
+            limpio = self.task_fields({**task, **data})
+            updates = [(key, limpio[key]) for key in data if key in limpio]
             if updates:
                 db.execute(f"UPDATE tasks SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=?",
                            [value for _, value in updates] + [task_id])
@@ -751,28 +854,15 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def update_profile(self) -> None:
         data = self.read_json()
-        name = str(data.get("name", "")).strip()
-        gender = str(data.get("gender", "female")).strip()
-        if not name:
-            self.send_json({"error": "Escribe tu nombre para guardar el perfil"}, HTTPStatus.BAD_REQUEST)
-            return
-        if gender not in {"female", "male", "neutral"}:
-            self.send_json({"error": "Selecciona una opción de género válida"}, HTTPStatus.BAD_REQUEST)
-            return
-        try:
-            target_income = max(0, float(data.get("target_income") or 0))
-        except (TypeError, ValueError):
-            self.send_json({"error": "La meta de ingresos debe ser un número"}, HTTPStatus.BAD_REQUEST)
-            return
         values = (
-            name[:120],
-            gender,
-            str(data.get("email", "")).strip()[:160],
-            str(data.get("phone", "")).strip()[:40],
-            str(data.get("city", "")).strip()[:100],
-            str(data.get("purpose", "")).strip()[:800],
-            target_income,
-            str(data.get("goal_date", "")).strip() or None,
+            clean_text(data.get("name"), 120, "Tu nombre", required=True),
+            clean_choice(data.get("gender"), VALID_GENDERS, "La representación visual", "female"),
+            clean_email(data.get("email")),
+            clean_text(data.get("phone"), 40, "El teléfono"),
+            clean_text(data.get("city"), 100, "La ciudad"),
+            clean_text(data.get("purpose"), 800, "Tu propósito"),
+            clean_number(data.get("target_income"), "La meta de ingresos", 0, 100_000_000),
+            clean_date(data.get("goal_date"), "La fecha objetivo"),
         )
         with connect() as db:
             db.execute(
@@ -799,7 +889,14 @@ class AppHandler(BaseHTTPRequestHandler):
                 raise FileNotFoundError
             body = target.read_bytes()
             mime = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            etag = f'"{hashlib.sha256(body).hexdigest()[:16]}"'
+            if self.headers.get("If-None-Match") == etag:
+                self.send_response(HTTPStatus.NOT_MODIFIED)
+                self.send_header("ETag", etag)
+                self.end_headers()
+                return
             self.send_response(HTTPStatus.OK)
+            self.send_header("ETag", etag)
             self.send_header("Content-Type", f"{mime}; charset=utf-8" if mime.startswith("text/") or mime == "application/javascript" else mime)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-cache" if target.suffix in {".html", ".js", ".css"} else "public, max-age=86400")
@@ -815,6 +912,8 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8787)))
     parser.add_argument("--init-only", action="store_true")
     args = parser.parse_args()
+    global APP_VERSION
+    APP_VERSION = app_version()
     initialize_database()
     if args.init_only:
         print(f"Base de datos lista ({'Turso' if USE_TURSO else DB_PATH})")

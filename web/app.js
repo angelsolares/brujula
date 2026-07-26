@@ -1,4 +1,4 @@
-const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", search: "", editingContactId: null, editingTaskId: null };
+const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", search: "", editingContactId: null, editingTaskId: null, version: null };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -49,22 +49,116 @@ const viewTitles = {
   guide: "Todo gran viaje empieza con una guía",
 };
 
+// El plan gratuito de Render duerme el servicio: el primer arranque puede tardar ~50 s.
+const REQUEST_TIMEOUT = 70000;
+
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || "Algo salió mal");
+  const controller = new AbortController();
+  const despertando = setTimeout(() => showWakingNotice(true), 3500);
+  const limite = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  let response;
+  try {
+    response = await fetch(path, {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      signal: controller.signal,
+      ...options,
+    });
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("El servidor tardó demasiado en responder. Intenta de nuevo en un momento.");
+    throw new Error("No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.");
+  } finally {
+    clearTimeout(despertando);
+    clearTimeout(limite);
+    showWakingNotice(false);
+  }
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error(response.ok ? "El servidor devolvió una respuesta inesperada." : `Error ${response.status} del servidor.`);
+  }
+  if (!response.ok) throw new Error(payload.error || `Error ${response.status} del servidor.`);
   return payload;
 }
 
-function toast(message) {
+function showWakingNotice(visible) {
+  const aviso = $("#wakingNotice");
+  if (aviso) aviso.classList.toggle("show", visible);
+}
+
+function toast(message, tone = "info") {
   const element = $("#toast");
   element.textContent = message;
+  element.dataset.tone = tone;
   element.classList.add("show");
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => element.classList.remove("show"), 2600);
+  toast.timer = setTimeout(() => element.classList.remove("show"), tone === "error" ? 4200 : 2600);
+}
+
+/** Deshabilita el botón y muestra su estado de carga mientras corre la acción. */
+async function withLoading(button, accion) {
+  if (!button || button.disabled) return accion();
+  const original = button.textContent;
+  button.disabled = true;
+  button.classList.add("is-loading");
+  button.textContent = button.dataset.loadingText || "Guardando…";
+  try {
+    return await accion();
+  } finally {
+    button.disabled = false;
+    button.classList.remove("is-loading");
+    button.textContent = original;
+  }
+}
+
+function setBusy(selector, busy) {
+  const element = $(selector);
+  if (element) element.classList.toggle("is-busy", busy);
+}
+
+/** Diálogo de confirmación con el diseño de la app, en lugar del confirm() del navegador. */
+function confirmar({ title, message, confirmText = "Sí, continuar", danger = true }) {
+  return new Promise((resolve) => {
+    const dialog = $("#confirmDialog");
+    $("#confirmTitle").textContent = title;
+    $("#confirmMessage").textContent = message;
+    const aceptar = $("#confirmAccept");
+    aceptar.textContent = confirmText;
+    aceptar.classList.toggle("danger-button", danger);
+    const cerrar = (valor) => {
+      dialog.close();
+      aceptar.removeEventListener("click", alAceptar);
+      $("#confirmCancel").removeEventListener("click", alCancelar);
+      dialog.removeEventListener("cancel", alCancelar);
+      resolve(valor);
+    };
+    const alAceptar = () => cerrar(true);
+    const alCancelar = () => cerrar(false);
+    aceptar.addEventListener("click", alAceptar);
+    $("#confirmCancel").addEventListener("click", alCancelar);
+    dialog.addEventListener("cancel", alCancelar);
+    dialog.showModal();
+  });
+}
+
+/** Muestra un mensaje de error debajo del campo correspondiente. */
+function marcarError(form, campo, mensaje) {
+  const input = form.elements[campo];
+  if (!input) return false;
+  const contenedor = input.closest("label") || input.parentElement;
+  limpiarErrores(form);
+  contenedor.classList.add("has-error");
+  const aviso = document.createElement("small");
+  aviso.className = "field-error";
+  aviso.textContent = mensaje;
+  contenedor.appendChild(aviso);
+  input.focus();
+  return true;
+}
+
+function limpiarErrores(form) {
+  $$(".has-error", form).forEach((element) => element.classList.remove("has-error"));
+  $$(".field-error", form).forEach((element) => element.remove());
 }
 
 function goToView(viewName) {
@@ -208,12 +302,19 @@ async function toggleTask(event) {
 
 async function deleteTask(taskId) {
   const task = (state.dashboard?.tasks || []).find((item) => item.id === taskId);
-  if (!confirm(`¿Eliminar la misión “${task ? task.title : ""}”? Esta acción no se puede deshacer.`)) return;
+  const aceptado = await confirmar({
+    title: "Eliminar misión",
+    message: `Se eliminará “${task ? task.title : "esta misión"}” de tu agenda. Esta acción no se puede deshacer.`,
+    confirmText: "Sí, eliminar",
+  });
+  if (!aceptado) return;
+  setBusy("#agendaTasks", true);
   try {
     const result = await api(`/api/tasks/${taskId}`, { method: "DELETE" });
-    toast(result.message);
+    toast(result.message, "success");
     await loadDashboard();
-  } catch (error) { toast(error.message); }
+  } catch (error) { toast(error.message, "error"); }
+  finally { setBusy("#agendaTasks", false); }
 }
 
 function openTaskDialog(taskId = null) {
@@ -237,21 +338,29 @@ function openTaskDialog(taskId = null) {
 
 async function submitTask(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
-  data.points = Number(data.points || 20);
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  limpiarErrores(form);
+  if (!data.title.trim()) return marcarError(form, "title", "Describe qué vas a hacer en esta misión.");
+  const puntos = Number(data.points);
+  if (!Number.isFinite(puntos) || puntos < 0 || puntos > 500) return marcarError(form, "points", "Los puntos deben ser un número entre 0 y 500.");
+  data.points = puntos;
   const editing = state.editingTaskId;
-  try {
-    if (editing) {
-      await api(`/api/tasks/${editing}`, { method: "PATCH", body: JSON.stringify(data) });
-      toast("Misión actualizada");
-    } else {
-      await api("/api/tasks", { method: "POST", body: JSON.stringify(data) });
-      toast("Nueva misión en tu agenda");
-    }
-    $("#taskDialog").close();
-    state.editingTaskId = null;
-    await loadDashboard();
-  } catch (error) { toast(error.message); }
+  await withLoading($("#taskSubmitButton"), async () => {
+    try {
+      if (editing) {
+        await api(`/api/tasks/${editing}`, { method: "PATCH", body: JSON.stringify(data) });
+        toast("Misión actualizada", "success");
+      } else {
+        await api("/api/tasks", { method: "POST", body: JSON.stringify(data) });
+        toast("Nueva misión en tu agenda", "success");
+      }
+      $("#taskDialog").close();
+      limpiarErrores(form);
+      state.editingTaskId = null;
+      await loadDashboard();
+    } catch (error) { toast(error.message, "error"); }
+  });
 }
 
 function personCard(contact) {
@@ -426,20 +535,29 @@ async function loadDashboard() {
     renderContactSummary(counts);
     celebrate(data.new_achievements);
   } catch (error) {
-    toast(`No pude cargar el tablero: ${error.message}`);
+    toast(`No pude cargar el tablero: ${error.message}`, "error");
   }
 }
 
 async function submitProfile(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
-  data.target_income = Number(data.target_income || 0);
-  try {
-    const result = await api("/api/profile", { method: "PATCH", body: JSON.stringify(data) });
-    $("#profileDialog").close();
-    toast(result.message);
-    await loadDashboard();
-  } catch (error) { toast(error.message); }
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  limpiarErrores(form);
+  if (!data.name.trim()) return marcarError(form, "name", "Escribe tu nombre para guardar el perfil.");
+  if (data.email && !emailValido(data.email.trim())) return marcarError(form, "email", "Revisa el correo: debe verse como nombre@correo.com");
+  const meta = Number(data.target_income || 0);
+  if (!Number.isFinite(meta) || meta < 0) return marcarError(form, "target_income", "La meta mensual debe ser un número positivo.");
+  data.target_income = meta;
+  await withLoading($('#profileForm button[type="submit"]'), async () => {
+    try {
+      const result = await api("/api/profile", { method: "PATCH", body: JSON.stringify(data) });
+      $("#profileDialog").close();
+      limpiarErrores(form);
+      toast(result.message, "success");
+      await loadDashboard();
+    } catch (error) { toast(error.message, "error"); }
+  });
 }
 
 function renderContactSummary(counts) {
@@ -475,6 +593,7 @@ async function loadContacts() {
   const params = new URLSearchParams();
   if (state.activeKind) params.set("kind", state.activeKind);
   if (state.search) params.set("q", state.search);
+  setBusy("#contactRows", true);
   try {
     state.contacts = await api(`/api/contacts?${params}`);
     $("#contactRows").innerHTML = state.contacts.length ? state.contacts.map(contactRow).join("") : `<tr><td colspan="7">No encontramos personas con esos filtros.</td></tr>`;
@@ -482,7 +601,11 @@ async function loadContacts() {
     $$('[data-advance-contact]').forEach((button) => button.addEventListener("click", advanceContact));
     $$('[data-edit-contact]').forEach((button) => button.addEventListener("click", () => openContactDialog(Number(button.dataset.editContact))));
     $$('[data-delete-contact]').forEach((button) => button.addEventListener("click", () => deleteContact(Number(button.dataset.deleteContact))));
-  } catch (error) { toast(error.message); }
+  } catch (error) {
+    toast(error.message, "error");
+    $("#contactRows").innerHTML = `<tr><td colspan="7">No pudimos cargar tu red. <button class="text-button" data-retry-contacts>Reintentar</button></td></tr>`;
+    $$("[data-retry-contacts]").forEach((button) => button.addEventListener("click", loadContacts));
+  } finally { setBusy("#contactRows", false); }
 }
 
 async function advanceContact(event) {
@@ -499,12 +622,19 @@ async function advanceContact(event) {
 
 async function deleteContact(contactId) {
   const contact = state.contacts.find((item) => item.id === contactId);
-  if (!confirm(`¿Eliminar a ${contact ? contact.name : "esta persona"} de tu red? Esta acción no se puede deshacer.`)) return;
+  const aceptado = await confirmar({
+    title: "Eliminar de mi red",
+    message: `Se eliminará a ${contact ? contact.name : "esta persona"} junto con su historial y sus próximos pasos. Esta acción no se puede deshacer.`,
+    confirmText: "Sí, eliminar",
+  });
+  if (!aceptado) return;
+  setBusy("#contactRows", true);
   try {
     const result = await api(`/api/contacts/${contactId}`, { method: "DELETE" });
-    toast(result.message);
+    toast(result.message, "success");
     await Promise.all([loadDashboard(), loadContacts()]);
-  } catch (error) { toast(error.message); }
+  } catch (error) { toast(error.message, "error"); }
+  finally { setBusy("#contactRows", false); }
 }
 
 function openContactDialog(contactId = null) {
@@ -516,7 +646,7 @@ function openContactDialog(contactId = null) {
   $("#contactModalTitle").textContent = contact ? `Editar a ${contact.name}` : "Agregar a mi red";
   $("#contactSubmitButton").textContent = contact ? "Guardar cambios" : "Guardar contacto +25 XP";
   if (contact) {
-    ["name", "kind", "interest", "stage", "source", "phone", "next_action_date", "health_profile", "next_action", "notes"].forEach((key) => {
+    ["name", "kind", "interest", "stage", "source", "phone", "email", "next_action_date", "birthday", "health_profile", "next_action", "notes"].forEach((key) => {
       if (form.elements[key]) form.elements[key].value = contact[key] ?? "";
     });
   } else {
@@ -538,36 +668,61 @@ async function loadMetrics() {
   } catch (error) { toast(error.message); }
 }
 
+const emailValido = (valor) => /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(valor);
+
+function validarContacto(form, data) {
+  limpiarErrores(form);
+  if (!data.name.trim()) return marcarError(form, "name", "Escribe el nombre de la persona.");
+  if (data.name.trim().length > 120) return marcarError(form, "name", "El nombre es demasiado largo (máximo 120 caracteres).");
+  if (data.email && !emailValido(data.email.trim())) return marcarError(form, "email", "Revisa el correo: debe verse como nombre@correo.com");
+  if (data.phone && data.phone.trim().length > 40) return marcarError(form, "phone", "El teléfono es demasiado largo.");
+  return false;
+}
+
 async function submitContact(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
+  if (validarContacto(form, data)) return;
   const editing = state.editingContactId;
-  try {
-    const result = await api(editing ? `/api/contacts/${editing}` : "/api/contacts", {
-      method: editing ? "PATCH" : "POST",
-      body: JSON.stringify(data),
-    });
-    $("#contactDialog").close();
-    form.reset();
-    state.editingContactId = null;
-    toast(editing ? "Contacto actualizado" : "¡Nueva persona en tu red! +25 XP");
-    if (!editing) celebrate(result.new_achievements);
-    await Promise.all([loadDashboard(), loadContacts()]);
-  } catch (error) { toast(error.message); }
+  const boton = $("#contactSubmitButton");
+  await withLoading(boton, async () => {
+    try {
+      const result = await api(editing ? `/api/contacts/${editing}` : "/api/contacts", {
+        method: editing ? "PATCH" : "POST",
+        body: JSON.stringify(data),
+      });
+      $("#contactDialog").close();
+      form.reset();
+      limpiarErrores(form);
+      state.editingContactId = null;
+      toast(editing ? "Contacto actualizado" : "¡Nueva persona en tu red! +25 XP", "success");
+      if (!editing) celebrate(result.new_achievements);
+      await Promise.all([loadDashboard(), loadContacts()]);
+    } catch (error) { toast(error.message, "error"); }
+  });
 }
 
 async function submitMetrics(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
-  ["new_prospects", "presentations", "new_clients", "new_associates", "sales"].forEach((key) => data[key] = Number(data[key] || 0));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  limpiarErrores(form);
+  const numericos = ["new_prospects", "presentations", "new_clients", "new_associates", "sales"];
+  for (const key of numericos) {
+    const valor = Number(data[key] || 0);
+    if (!Number.isFinite(valor) || valor < 0) return marcarError(form, key, "Debe ser un número igual o mayor que cero.");
+    data[key] = valor;
+  }
   data.metric_date = isoDate();
-  try {
-    const result = await api("/api/metrics", { method: "POST", body: JSON.stringify(data) });
-    toast(result.message);
-    celebrate(result.new_achievements);
-    await Promise.all([loadDashboard(), loadMetrics()]);
-  } catch (error) { toast(error.message); }
+  await withLoading(form.querySelector('button[type="submit"]'), async () => {
+    try {
+      const result = await api("/api/metrics", { method: "POST", body: JSON.stringify(data) });
+      toast(result.message, "success");
+      celebrate(result.new_achievements);
+      await Promise.all([loadDashboard(), loadMetrics()]);
+    } catch (error) { toast(error.message, "error"); }
+  });
 }
 
 const quizStatements = [
@@ -613,6 +768,9 @@ function bindEvents() {
   $("#taskForm").addEventListener("submit", submitTask);
   $("#openPurposeEdit").addEventListener("click", openProfileDialog);
   $("#downloadBackup").addEventListener("click", () => { window.location.href = "/api/export"; toast("Preparando tu respaldo…"); });
+  $("#reloadApp").addEventListener("click", () => location.reload());
+  // Si el usuario vuelve a la pestaña tras un rato, comprobar si hay código nuevo.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) checkForUpdate(); });
   $("#openQuiz").addEventListener("click", () => $("#quizDialog").showModal());
   $$('[data-close-quiz]').forEach((button) => button.addEventListener("click", () => $("#quizDialog").close()));
   $("#quizForm").addEventListener("submit", submitQuiz);
@@ -653,12 +811,22 @@ function applyTodayLabels() {
 async function showStorageMode() {
   try {
     const health = await api("/api/health");
+    state.version = health.version;
     const label = health.database === "turso" ? "una base de datos en la nube (Turso)" : "el archivo local data/brujula.db";
     $("#faqStorageMode").textContent = label;
     $("#profilePrivacyNote").textContent = health.database === "turso"
       ? "🔒 Tus datos se guardan en la base en la nube de esta aplicación."
       : "🔒 Tus datos se guardan únicamente en este equipo.";
   } catch { /* El modo de almacenamiento es informativo. */ }
+}
+
+/** Si el servidor ya tiene una versión más nueva, ofrecer recargar en vez de fallar en silencio. */
+async function checkForUpdate() {
+  if (!state.version) return;
+  try {
+    const health = await api("/api/health");
+    if (health.version && health.version !== state.version) $("#updateBanner").classList.add("show");
+  } catch { /* Sin conexión no hay nada que avisar. */ }
 }
 
 async function init() {

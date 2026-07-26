@@ -147,7 +147,7 @@
       <section class="view" id="view-measure">
         <div class="page-intro"><div><span class="mini-kicker">MEDIR</span><h2>Lo que hice hoy</h2><p>Registrar tus avances convierte esfuerzo en aprendizaje.</p></div><span class="soft-chip">+15 XP al guardar</span></div>
         <div class="measure-layout">
-          <form class="panel metrics-form" id="metricsForm">
+          <form class="panel metrics-form" id="metricsForm" novalidate>
             <div class="panel-head"><div><span class="mini-kicker">REGISTRO DIARIO</span><h3>Cuéntale a tu brújula</h3></div><span class="metric-date" id="metricDateLabel"></span></div>
             <div class="number-grid">
               <label><span>Prospectos nuevos</span><input name="new_prospects" type="number" min="0" value="0"><small>personas</small></label>
@@ -338,9 +338,23 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="waking-notice" id="wakingNotice" role="status" aria-live="polite"><span class="spinner"></span> Despertando el servidor, esto puede tardar unos segundos…</div>
+  <div class="update-banner" id="updateBanner" role="status"><span>Hay una versión nueva de BRÚJULA disponible.</span><button type="button" id="reloadApp">Actualizar ahora</button></div>
+
+  <dialog id="confirmDialog" class="modal confirm-modal">
+    <div class="confirm-shell">
+      <span class="confirm-icon" aria-hidden="true">⚠</span>
+      <h2 id="confirmTitle">¿Confirmas?</h2>
+      <p id="confirmMessage"></p>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="confirmCancel">Cancelar</button>
+        <button type="button" class="primary-button danger-button" id="confirmAccept">Sí, continuar</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="contactDialog" class="modal">
-    <form id="contactForm" method="dialog">
+    <form id="contactForm" method="dialog" novalidate>
       <div class="modal-head"><div><span class="mini-kicker" id="contactModalKicker">NUEVA RELACIÓN</span><h2 id="contactModalTitle">Agregar a mi red</h2></div><button type="button" data-close-modal aria-label="Cerrar">×</button></div>
       <div class="form-grid">
         <label class="span-2"><span>Nombre completo *</span><input name="name" required placeholder="Ej. Sofía Hernández"></label>
@@ -348,8 +362,10 @@
         <label><span>Interés</span><select name="interest"><option>Alto</option><option selected>Medio</option><option>Bajo</option></select></label>
         <label><span>Etapa</span><select name="stage"><option>Nuevo</option><option>Contactado</option><option>Presentación</option><option>Seguimiento</option><option>Cierre</option></select></label>
         <label><span>Fuente</span><select name="source"><option>En persona</option><option>Referido</option><option>Facebook</option><option>Instagram</option><option>Evento</option><option>Café virtual</option></select></label>
-        <label><span>Teléfono</span><input name="phone" type="tel" placeholder="656 000 0000"></label>
+        <label><span>Teléfono</span><input name="phone" type="tel" maxlength="40" placeholder="656 000 0000"></label>
+        <label><span>Correo</span><input name="email" type="email" maxlength="160" placeholder="nombre@correo.com"></label>
         <label><span>Próxima fecha</span><input name="next_action_date" type="date"></label>
+        <label><span>Cumpleaños</span><input name="birthday" type="date"></label>
         <label class="span-2"><span>Perfil de salud / interés</span><input name="health_profile" placeholder="¿Qué necesita o qué desea lograr?"></label>
         <label class="span-2"><span>Próxima acción</span><input name="next_action" placeholder="Ej. Enviar testimonio y agendar café"></label>
         <label class="span-2"><span>Notas</span><textarea name="notes" rows="3" placeholder="Detalles que te ayudarán a conectar mejor..."></textarea></label>
@@ -359,7 +375,7 @@
   </dialog>
 
   <dialog id="taskDialog" class="modal">
-    <form id="taskForm" method="dialog">
+    <form id="taskForm" method="dialog" novalidate>
       <div class="modal-head"><div><span class="mini-kicker" id="taskModalKicker">NUEVA MISIÓN</span><h2 id="taskModalTitle">Agregar una misión</h2></div><button type="button" data-close-task aria-label="Cerrar">×</button></div>
       <div class="form-grid">
         <label class="span-2"><span>¿Qué vas a hacer? *</span><input name="title" required maxlength="160" placeholder="Ej. Llamar a Sofía para agendar café"></label>
@@ -384,7 +400,7 @@
   </dialog>
 
   <dialog id="profileDialog" class="modal profile-edit-modal">
-    <form id="profileForm" method="dialog">
+    <form id="profileForm" method="dialog" novalidate>
       <div class="modal-head"><div><span class="mini-kicker">MI IDENTIDAD EN BRÚJULA</span><h2>Editar mi perfil</h2><p>Personaliza tus datos, tu meta y la forma en que te representa la experiencia.</p></div><button type="button" data-close-profile aria-label="Cerrar">×</button></div>
       <div class="profile-editor-layout">
         <aside class="profile-preview-card">
