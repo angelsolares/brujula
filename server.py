@@ -890,7 +890,11 @@ class AppHandler(BaseHTTPRequestHandler):
             body = target.read_bytes()
             mime = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
             etag = f'"{hashlib.sha256(body).hexdigest()[:16]}"'
-            if self.headers.get("If-None-Match") == etag:
+            # Cloudflare (delante de Render) debilita el ETag a W/"...": comparar sin el prefijo.
+            recibido = (self.headers.get("If-None-Match") or "").strip()
+            if recibido.startswith("W/"):
+                recibido = recibido[2:]
+            if recibido == etag:
                 self.send_response(HTTPStatus.NOT_MODIFIED)
                 self.send_header("ETag", etag)
                 self.end_headers()
