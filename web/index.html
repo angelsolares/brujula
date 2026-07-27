@@ -67,6 +67,9 @@
           <div class="hero-medal"><span>🏅</span><strong id="heroStreak">0</strong><small>DÍAS</small></div>
         </article>
 
+        <div class="section-heading compact" id="alertsHeading" hidden><div><span class="mini-kicker">PLAN DE COMPENSACIÓN</span><h2>Lo que puedes lograr este mes</h2></div><button class="text-button" data-go-view="map">Ver mi rango →</button></div>
+        <div class="alert-stack" id="compensationAlerts"></div>
+
         <div class="section-heading">
           <div><span class="mini-kicker">TU NEGOCIO HOY</span><h2>Panel de rumbo</h2></div>
           <button class="text-button" data-go-view="measure">Ver reporte completo →</button>
@@ -141,6 +144,26 @@
           <div class="journey-copy"><span class="chapter-pill">RUTA ACTUAL</span><h3>De propósito a liderazgo</h3><p>Sigue el sendero: cada meta completada descubre la siguiente etapa.</p></div>
           <div class="map-nodes"><button class="node complete" style="--x:24%;--y:76%"><i>✓</i><span>Propósito</span></button><button class="node complete" style="--x:40%;--y:68%"><i>✓</i><span>Meta</span></button><button class="node current" style="--x:57%;--y:62%"><i>3</i><span>Prospectos</span></button><button class="node" style="--x:68%;--y:50%"><i>4</i><span>Aprendizaje</span></button><button class="node" style="--x:79%;--y:38%"><i>5</i><span>Desempeño</span></button><button class="node" style="--x:88%;--y:24%"><i>6</i><span>Liderazgo</span></button></div>
         </article>
+        <article class="panel rank-panel">
+          <div class="panel-head"><div><span class="mini-kicker">PLAN DE COMPENSACIÓN</span><h3>Tu rango y lo que sigue</h3></div><button class="secondary-button" id="openRankEdit" type="button">Cambiar mi rango</button></div>
+          <div class="rank-current">
+            <div class="rank-badge"><small>RANGO ACTUAL</small><strong id="rankLabel">Consultor Empresario</strong></div>
+            <div class="rank-maintenance">
+              <div class="rank-maintenance-head"><span id="rankMaintenanceText">Mantenimiento mensual</span><b id="rankMaintenanceValue">0 / 0 VVP</b></div>
+              <div class="bar-track"><i id="rankMaintenanceBar"></i></div>
+              <small id="rankDaysLeft"></small>
+            </div>
+          </div>
+          <div class="rank-metrics">
+            <div><small>VVP DEL MES</small><strong id="rankVvp">0</strong></div>
+            <div><small>PEDIDOS DE 400+ VP</small><strong id="rankOrders">0</strong></div>
+            <div><small>BONO DE CLIENTES</small><strong id="rankClientBonus">0%</strong></div>
+            <div><small>BDN</small><strong id="rankBdn">0%</strong></div>
+          </div>
+          <div class="rank-next" id="rankNext"></div>
+          <div class="rank-ladder" id="rankLadder"></div>
+          <p class="income-disclaimer" id="incomeDisclaimer"></p>
+        </article>
         <div class="goal-grid" id="goalGrid"></div>
       </section>
 
@@ -156,6 +179,10 @@
               <label><span>Asociados nuevos</span><input name="new_associates" type="number" min="0" value="0"><small>socios</small></label>
             </div>
             <label class="money-field"><span>¿Cuánto vendí?</span><div><b>$</b><input name="sales" type="number" min="0" step="100" value="0"><small>MXN</small></div></label>
+            <div class="number-grid">
+              <label><span>Puntos de volumen (VVP)</span><input name="volume_points" type="number" min="0" step="10" value="0"><small>cuentan para tu rango</small></label>
+              <label><span>Pedidos de cliente de 400+ VP</span><input name="client_orders" type="number" min="0" step="1" value="0"><small>cuentan para el bono</small></label>
+            </div>
             <label class="full-field"><span>Productos específicos vendidos</span><input name="products_sold" type="text" placeholder="Ej. Platinum x2, Sport x1"></label>
             <button class="primary-button wide" type="submit">Guardar mi avance ✦</button>
           </form>
@@ -206,6 +233,7 @@
           <button data-guide-section="guideRoute">1. Tu recorrido</button>
           <button data-guide-section="guideGamification">2. Puntos y niveles</button>
           <button data-guide-section="guideCrm">3. Cómo usar el CRM</button>
+          <button data-guide-section="guidePlan">Plan de compensación</button>
           <button data-guide-section="guideProfiles">4. Tus perfiles</button>
           <button data-guide-section="guideWeek">5. Primera semana</button>
           <button data-guide-section="guideFaq">6. Dudas frecuentes</button>
@@ -295,6 +323,23 @@
           </div>
         </section>
 
+        <section class="guide-section" id="guidePlan">
+          <div class="guide-section-head"><div><span class="mini-kicker">GANANCIAS</span><h2>Cómo se traduce tu trabajo en ingresos</h2><p>BRÚJULA sigue el Plan de Compensación oficial de Immunotec para México. Aquí tienes las reglas que la aplicación usa para calcular tu rango y tus avisos.</p></div><span class="section-number">3½</span></div>
+          <div class="plan-concepts">
+            <article class="panel plan-concept"><span>📦</span><div><small>VVP</small><h3>Volumen de Venta Personal</h3><p>Los puntos de volumen de lo que compras para revender más lo que compran tus clientes personales. Es la cifra que define tu rango y tu mantenimiento mensual.</p></div></article>
+            <article class="panel plan-concept"><span>💠</span><div><small>VC</small><h3>Volumen Comisionable</h3><p>El valor sobre el que se paga comisión. Puede ser distinto al precio del producto: por eso los pesos y los VP se registran por separado.</p></div></article>
+            <article class="panel plan-concept"><span>🌳</span><div><small>VGP Y VTOC</small><h3>Volumen de tu organización</h3><p>Incluyen el volumen de tu equipo. Dependen de tu línea descendente, así que se consultan en tu back office; BRÚJULA no los calcula.</p></div></article>
+          </div>
+          <div class="plan-bonus-grid">
+            <article class="panel plan-bonus"><span class="how-number">01</span><h3>Ganancias por venta al por menor</h3><p>La diferencia entre tu precio de Consultor y el precio que paga el Cliente, en un rango de <b>5% a 30%</b>.</p></article>
+            <article class="panel plan-bonus"><span class="how-number">02</span><h3>Bono por Volumen de Clientes</h3><p>Con <b>3 clientes</b> que pidan 400+ VP en el mes entras al primer nivel (<b>5%</b>); con <b>8 clientes</b> llegas al nivel superior (<b>20%</b>).</p></article>
+            <article class="panel plan-bonus"><span class="how-number">03</span><h3>Bono de Desarrollo de Negocio</h3><p><b>5%</b> con un consultor nuevo, <b>10%</b> con dos y <b>20%</b> con tres o más. Solo aplica el <b>primer mes</b> de cada consultor: por eso te avisamos con los días que quedan.</p></article>
+            <article class="panel plan-bonus"><span class="how-number">04</span><h3>Bonos por ascenso</h3><p>Se pagan al subir de rango y mantenerlo un segundo mes: desde <b>$2,600 MXN</b> en Plata hasta <b>$130,000 MXN</b> en Platino.</p></article>
+          </div>
+          <div class="route-tip"><span>⚖</span><div><strong>Qué calcula BRÚJULA y qué no</strong><p>La aplicación da seguimiento a tu <b>VVP</b>, a tus pedidos de cliente y a los consultores que inscribes, porque son datos que tú registras. Las <b>comisiones de equipo</b> (hasta 47% por generaciones G1 a G8) dependen del volumen de toda tu organización y se consultan en tu back office oficial.</p></div><button data-go-view="map">Ver mi rango →</button></div>
+          <p class="income-disclaimer">Las cifras que muestra BRÚJULA son estimaciones con base en el plan de compensación y en lo que registras. No constituyen una garantía ni una proyección de ingresos reales: el éxito depende del esfuerzo de ventas, la constancia y el liderazgo de cada Consultor.</p>
+        </section>
+
         <section class="guide-section" id="guideProfiles">
           <div class="guide-section-head"><div><span class="mini-kicker">CONOCIMIENTO PERSONAL</span><h2>Cinco perfiles, cinco formas de avanzar</h2><p>El test no pone etiquetas. Te ayuda a elegir acciones que se sientan naturales y a usar tus fortalezas para apoyar lo que más te cuesta.</p></div><span class="section-number">04</span></div>
           <div class="profile-guide-visual">
@@ -336,6 +381,8 @@
             <details><summary>¿Puedo crear mis propias misiones?<span>＋</span></summary><p>Sí. En <b>Agenda de hoy</b> usa el botón <b>＋ Nueva misión</b>: eliges el título, la categoría, el perfil, la fecha, la hora y cuántos XP vale. Con <b>✎</b> la editas y con <b>🗑</b> la eliminas.</p></details>
             <details><summary>¿Puedo corregir o borrar algo que registré mal?<span>＋</span></summary><p>Sí. Tanto en <b>Mi red</b> como en <b>Agenda de hoy</b> cada elemento tiene un botón para editar (<b>✎</b>) y otro para eliminar (<b>🗑</b>). Al eliminar te pedimos confirmación, porque no se puede deshacer.</p></details>
             <details><summary>¿Cómo se calcula mi racha?<span>＋</span></summary><p>Son los días seguidos en que guardaste tu avance en <b>Medir avances</b>. No depende de completar misiones. Si te saltas un día completo, la cuenta vuelve a cero; mientras el día siga en curso, tu racha se mantiene aunque todavía no registres.</p></details>
+            <details><summary>¿Qué diferencia hay entre pesos y puntos de volumen?<span>＋</span></summary><p>Los <b>pesos</b> son lo que facturas; los <b>puntos de volumen (VP)</b> son la unidad con la que el plan de compensación mide tu rango y tus bonos. Un mismo pedido tiene ambos valores, por eso el registro diario te pide los dos.</p></details>
+            <details><summary>¿Cómo sabe BRÚJULA cuál es mi rango?<span>＋</span></summary><p>Tú se lo dices: en <b>Editar mis datos</b> eliges el rango que aparece en tu back office de Immunotec. Con ese dato la aplicación conoce tu requisito de mantenimiento mensual (180, 400 o 600 VVP) y te avisa cuánto te falta.</p></details>
             <details><summary>¿Por qué a veces tarda en abrir la primera vez?<span>＋</span></summary><p>La versión publicada usa un servidor gratuito que se suspende tras un rato sin visitas. El primer acceso lo despierta y puede tardar hasta un minuto; verás el aviso “Despertando el servidor”. Las siguientes pantallas cargan de inmediato.</p></details>
             <details><summary>¿Puedo buscar solo clientes o asociados?<span>＋</span></summary><p>Sí. En <b>Mi red</b> usa los filtros Todos, Prospectos, Clientes o Asociados; también puedes buscar por nombre, etapa o nota.</p></details>
             <details><summary>¿Cómo cambio mi nombre o las ilustraciones?<span>＋</span></summary><p>Presiona tu nombre al final del menú lateral o <b>Editar mis datos</b> en Mi brújula. Elige Mujer, Hombre o Sin avatar; al guardar se adaptan el tablero, el mapa y tu resultado visual.</p></details>
@@ -377,6 +424,8 @@
         <label><span>Correo</span><input name="email" type="email" maxlength="160" placeholder="nombre@correo.com"></label>
         <label><span>Próxima fecha</span><input name="next_action_date" type="date"></label>
         <label><span>Cumpleaños</span><input name="birthday" type="date"></label>
+        <label><span>Consumo mensual (MXN)</span><input name="monthly_consumption" type="number" min="0" step="100" placeholder="0"></label>
+        <label><span>Puntos de volumen (VP)</span><input name="volume_points" type="number" min="0" step="10" placeholder="0"><small>400+ VP califica para el bono</small></label>
         <label class="span-2"><span>Perfil de salud / interés</span><input name="health_profile" placeholder="¿Qué necesita o qué desea lograr?"></label>
         <label class="span-2"><span>Próxima acción</span><input name="next_action" placeholder="Ej. Enviar testimonio y agendar café"></label>
         <label class="span-2"><span>Notas</span><textarea name="notes" rows="3" placeholder="Detalles que te ayudarán a conectar mejor..."></textarea></label>
@@ -440,6 +489,16 @@
             <label class="profile-field"><span>Meta mensual (MXN)</span><input name="target_income" type="number" min="0" step="100" placeholder="35000"></label>
             <label class="profile-field"><span>Fecha objetivo</span><input name="goal_date" type="date"></label>
           </div>
+          <label class="profile-field"><span>Mi rango actual</span><select name="rank">
+            <option value="Empresario">Consultor Empresario</option>
+            <option value="Miembro">Consultor Miembro</option>
+            <option value="Asociado">Asociado</option>
+            <option value="Plata">Plata</option>
+            <option value="Oro">Oro</option>
+            <option value="Diamante">Diamante</option>
+            <option value="Diamante Ejecutivo">Diamante Ejecutivo</option>
+            <option value="Platino">Platino</option>
+          </select><small>Tómalo de tu back office de Immunotec: define tu requisito de mantenimiento mensual.</small></label>
         </div>
       </div>
       <div class="modal-actions profile-modal-actions"><span id="profilePrivacyNote">🔒 Tus datos se guardan en la base de esta aplicación.</span><div><button type="button" class="secondary-button" data-close-profile>Cancelar</button><button type="submit" class="primary-button">Guardar mi perfil</button></div></div>

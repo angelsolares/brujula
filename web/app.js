@@ -1,4 +1,4 @@
-const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", search: "", editingContactId: null, editingTaskId: null, version: null };
+const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", search: "", editingContactId: null, editingTaskId: null, version: null, ranks: [] };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -195,7 +195,7 @@ function applyVisualVariant(gender) {
 
 function fillProfileForm(user) {
   const form = $("#profileForm");
-  ["name", "email", "phone", "city", "purpose", "target_income", "goal_date"].forEach((key) => {
+  ["name", "email", "phone", "city", "purpose", "target_income", "goal_date", "rank"].forEach((key) => {
     if (form.elements[key]) form.elements[key].value = user[key] ?? "";
   });
   const gender = visualVariants[user.gender] ? user.gender : "neutral";
@@ -274,6 +274,64 @@ function renderAchievements(achievements = []) {
       <div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.description)}</p></div>
       <small>${item.unlocked_at ? shortDate(item.unlocked_at) : "Pendiente"}</small>
     </article>`).join("");
+}
+
+const vp = (value) => `${Number(value || 0).toLocaleString("es-MX", { maximumFractionDigits: 0 })}`;
+
+function renderCompensation(plan) {
+  if (!plan) return;
+  const alertas = plan.alerts || [];
+  $("#alertsHeading").hidden = alertas.length === 0;
+  $("#compensationAlerts").innerHTML = alertas.map((alerta) => `
+    <article class="alert-card alert-${alerta.tone}">
+      <span class="alert-icon">${{ urgent: "⏰", warning: "⚠", success: "✓", info: "◎" }[alerta.tone] || "◎"}</span>
+      <div><strong>${escapeHtml(alerta.title)}</strong><p>${escapeHtml(alerta.message)}</p></div>
+    </article>`).join("");
+
+  const rango = plan.rank;
+  $("#rankLabel").textContent = rango.label;
+  $("#rankVvp").textContent = vp(plan.month_vvp);
+  $("#rankOrders").textContent = plan.month_orders;
+  $("#rankClientBonus").textContent = `${plan.client_bonus.percent}%`;
+  $("#rankBdn").textContent = `${plan.bdn.percent}%`;
+
+  if (rango.maintenance) {
+    $("#rankMaintenanceText").textContent = rango.maintenance_met ? "Mantenimiento cubierto" : "Faltan para el mantenimiento";
+    $("#rankMaintenanceValue").textContent = `${vp(plan.month_vvp)} / ${vp(rango.maintenance)} VVP`;
+    $("#rankMaintenanceBar").style.width = `${rango.progress}%`;
+    $("#rankMaintenanceBar").style.background = rango.maintenance_met ? "var(--green)" : "var(--pink)";
+  } else {
+    $("#rankMaintenanceText").textContent = "Este rango no exige mantenimiento mensual";
+    $("#rankMaintenanceValue").textContent = `${vp(plan.month_vvp)} VVP este mes`;
+    $("#rankMaintenanceBar").style.width = "100%";
+    $("#rankMaintenanceBar").style.background = "var(--purple)";
+  }
+  $("#rankDaysLeft").textContent = plan.days_left === 0
+    ? "Hoy es el último día del mes de comisión."
+    : `Quedan ${plan.days_left} día${plan.days_left === 1 ? "" : "s"} del mes de comisión.`;
+
+  const siguiente = plan.next_rank;
+  $("#rankNext").innerHTML = siguiente ? `
+    <div class="rank-next-head"><span class="mini-kicker">SIGUIENTE RANGO</span><strong>${escapeHtml(siguiente.label)}</strong>
+      ${siguiente.promotion_bonus ? `<em>Bono por ascenso ${money.format(siguiente.promotion_bonus)}</em>` : ""}</div>
+    <p>${escapeHtml(siguiente.requirement)}</p>
+    ${siguiente.tracked_by_app
+      ? `<div class="bar-track"><i style="width:${siguiente.vvp_progress}%;background:var(--purple)"></i></div><small>${vp(plan.month_vvp)} de ${vp(siguiente.requirement_vvp)} VVP acumulados este mes.</small>`
+      : `<small class="rank-manual-note">Este requisito depende del volumen de tu organización, así que se consulta en tu back office; BRÚJULA da seguimiento a tu VVP y a tu mantenimiento.</small>`}` : `
+    <div class="rank-next-head"><span class="mini-kicker">RANGO MÁXIMO</span><strong>Platino alcanzado</strong></div>
+    <p>Ahora el crecimiento viene de promover Platinos en tu línea descendente.</p>`;
+
+  $("#rankLadder").innerHTML = (state.ranks || []).map((item, index) => {
+    const actual = item.key === rango.key;
+    const superado = index < (state.ranks || []).findIndex((r) => r.key === rango.key);
+    return `<div class="rank-step ${actual ? "current" : ""} ${superado ? "done" : ""}">
+      <b>${escapeHtml(item.label)}</b>
+      <small>${item.maintenance ? `${vp(item.maintenance)} VVP/mes` : "Sin mantenimiento"}</small>
+      ${item.promotion_bonus ? `<em>${money.format(item.promotion_bonus)}</em>` : "<em>—</em>"}
+    </div>`;
+  }).join("");
+
+  $("#incomeDisclaimer").textContent = plan.disclaimer;
 }
 
 function renderWeek(week = []) {
@@ -544,6 +602,7 @@ async function loadDashboard() {
     renderAchievements(data.achievements);
     renderGuideAchievements(data.achievements);
     renderWeek(data.week_activity);
+    renderCompensation(data.compensation);
     updateGuideWithUser(user);
     $("#attentionContacts").innerHTML = data.recent_contacts.map(personCard).join("");
     renderContactSummary(counts);
@@ -660,7 +719,7 @@ function openContactDialog(contactId = null) {
   $("#contactModalTitle").textContent = contact ? `Editar a ${contact.name}` : "Agregar a mi red";
   $("#contactSubmitButton").textContent = contact ? "Guardar cambios" : "Guardar contacto +25 XP";
   if (contact) {
-    ["name", "kind", "interest", "stage", "source", "phone", "email", "next_action_date", "birthday", "health_profile", "next_action", "notes"].forEach((key) => {
+    ["name", "kind", "interest", "stage", "source", "phone", "email", "next_action_date", "birthday", "monthly_consumption", "volume_points", "health_profile", "next_action", "notes"].forEach((key) => {
       if (form.elements[key]) form.elements[key].value = contact[key] ?? "";
     });
   } else {
@@ -722,7 +781,7 @@ async function submitMetrics(event) {
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
   limpiarErrores(form);
-  const numericos = ["new_prospects", "presentations", "new_clients", "new_associates", "sales"];
+  const numericos = ["new_prospects", "presentations", "new_clients", "new_associates", "sales", "volume_points", "client_orders"];
   for (const key of numericos) {
     const valor = Number(data[key] || 0);
     if (!Number.isFinite(valor) || valor < 0) return marcarError(form, key, "Debe ser un número igual o mayor que cero.");
@@ -781,6 +840,7 @@ function bindEvents() {
   $$('[data-close-task]').forEach((button) => button.addEventListener("click", () => { state.editingTaskId = null; $("#taskDialog").close(); }));
   $("#taskForm").addEventListener("submit", submitTask);
   $("#openPurposeEdit").addEventListener("click", openProfileDialog);
+  $("#openRankEdit").addEventListener("click", openProfileDialog);
   $("#downloadBackup").addEventListener("click", () => { window.location.href = "/api/export"; toast("Preparando tu respaldo…"); });
   $("#reloadApp").addEventListener("click", () => location.reload());
   // Si el usuario vuelve a la pestaña tras un rato, comprobar si hay código nuevo.
@@ -843,6 +903,13 @@ async function checkForUpdate() {
   } catch { /* Sin conexión no hay nada que avisar. */ }
 }
 
+async function loadRanks() {
+  try {
+    const plan = await api("/api/compensation");
+    state.ranks = plan.ranks || [];
+  } catch { /* La escalera de rangos es informativa. */ }
+}
+
 async function init() {
   buildQuiz();
   bindEvents();
@@ -850,6 +917,7 @@ async function init() {
   restoreGuideChecklist();
   const initialView = location.hash.replace("#", "");
   if (viewTitles[initialView]) goToView(initialView);
+  await loadRanks();
   await Promise.all([loadDashboard(), loadMetrics(), showStorageMode()]);
 }
 

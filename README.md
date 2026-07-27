@@ -28,7 +28,8 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 | Método | Ruta | Descripción |
 | --- | --- | --- |
 | GET | `/api/health` | Estado del servidor y si usa SQLite local o Turso. |
-| GET | `/api/dashboard` | Tablero completo: perfil, misiones, racha, logros y tendencias. |
+| GET | `/api/dashboard` | Tablero completo: perfil, misiones, racha, logros, tendencias y compensación. |
+| GET | `/api/compensation` | Rango actual, avance de mantenimiento, niveles de bono y alertas del mes. |
 | GET | `/api/export` | Descarga un respaldo JSON de todas las tablas. |
 | GET/POST | `/api/contacts` | Listar (con filtros `kind` y `q`) y crear contactos. |
 | PATCH/DELETE | `/api/contacts/<id>` | Editar cualquier campo o eliminar un contacto. |
@@ -45,6 +46,8 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 - Tablero gamificado con nivel, experiencia, racha calculada y misiones.
 - CRM de prospectos, clientes y asociados con alta, edición y eliminación.
 - Agenda diaria por perfil y puntos XP, con misiones que puedes crear, editar y borrar.
+- Seguimiento del plan de compensación: rango, mantenimiento mensual en VVP,
+  niveles del Bono por Volumen de Clientes y del BDN, con alertas y fecha límite.
 - Logros que se desbloquean solos al cumplir sus condiciones.
 - Respaldo descargable en JSON desde la guía interactiva.
 - Mapa de crecimiento con metas SMART.
@@ -54,6 +57,19 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 - Representación visual femenina, masculina o neutral que adapta las ilustraciones del tablero, mapa y brújula.
 - Rutas de capacitación y desarrollo personal.
 - Guía interactiva con recorrido guiado, simulador de niveles, reglas de XP, manual del CRM, perfiles, plan de primera semana y preguntas frecuentes.
+
+## Plan de compensación
+
+Las reglas del plan oficial de Immunotec (México) viven en constantes al inicio de
+`server.py`: `RANKS`, `CLIENT_BONUS_TIERS`, `BDN_TIERS` y `RETAIL_MARGIN`. Si el plan
+cambia, edita esos valores y no la lógica que los usa.
+
+La aplicación calcula solo lo que tú registras: **VVP**, pedidos de cliente de 400+ VP
+y consultores inscritos en el mes. Los volúmenes de organización (**VGP**, **VTOC**) y
+las comisiones de equipo por generaciones dependen de tu línea descendente y se
+consultan en el back office oficial; por eso el rango se captura manualmente.
+
+Cualquier cifra mostrada es una estimación, no una garantía de ingresos.
 
 ## Estructura principal
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import hashlib
 import json
 import mimetypes
@@ -123,6 +124,81 @@ def clean_number(value, label: str, minimum: float = 0, maximum: float | None = 
     return number
 
 
+# ---------------------------------------------------------------------------
+# Plan de compensación oficial (México). Los valores provienen del documento
+# "Plan de Compensación Oficial" y pueden cambiar: edítalos aquí, no en la lógica.
+# ---------------------------------------------------------------------------
+
+RANKS = [
+    {"key": "Empresario", "label": "Consultor Empresario", "maintenance": 0, "promotion_bonus": 0,
+     "requirement": "Aún no acumulas 400 VVP en un mes de comisión.", "tracked_by_app": True, "requirement_vvp": 0},
+    {"key": "Miembro", "label": "Consultor Miembro", "maintenance": 180, "promotion_bonus": 0,
+     "requirement": "400 VVP en cualquier mes de comisión.", "tracked_by_app": True, "requirement_vvp": 400},
+    {"key": "Asociado", "label": "Asociado", "maintenance": 400, "promotion_bonus": 0,
+     "requirement": "2,000 VGP, de los cuales 400 deben ser VVP.", "tracked_by_app": False, "requirement_vvp": 400},
+    {"key": "Plata", "label": "Plata", "maintenance": 400, "promotion_bonus": 2600,
+     "requirement": "6,000 VTOC · máximo 2,700 por ramificación · 3 ramificaciones vendiendo.", "tracked_by_app": False, "requirement_vvp": 0},
+    {"key": "Oro", "label": "Oro", "maintenance": 600, "promotion_bonus": 6500,
+     "requirement": "30,000 VTOC · máximo 13,500 por ramificación · 4 ramificaciones vendiendo.", "tracked_by_app": False, "requirement_vvp": 0},
+    {"key": "Diamante", "label": "Diamante", "maintenance": 600, "promotion_bonus": 32500,
+     "requirement": "125,000 VTOC · máximo 56,250 por ramificación.", "tracked_by_app": False, "requirement_vvp": 0},
+    {"key": "Diamante Ejecutivo", "label": "Diamante Ejecutivo", "maintenance": 600, "promotion_bonus": 65000,
+     "requirement": "500,000 VTOC · máximo 225,000 por ramificación.", "tracked_by_app": False, "requirement_vvp": 0},
+    {"key": "Platino", "label": "Platino", "maintenance": 600, "promotion_bonus": 130000,
+     "requirement": "1,500,000 VTOC · máximo 675,000 por ramificación.", "tracked_by_app": False, "requirement_vvp": 0},
+]
+RANK_KEYS = [rank["key"] for rank in RANKS]
+
+# Un pedido de Cliente cuenta para el bono a partir de este volumen.
+QUALIFYING_ORDER_VP = 400
+# Niveles documentados del Bono por Volumen de Clientes. El plan menciona
+# niveles intermedios que este documento no detalla.
+CLIENT_BONUS_TIERS = [
+    {"clients": 3, "percent": 5, "label": "Primer nivel"},
+    {"clients": 8, "percent": 20, "label": "Nivel superior"},
+]
+# Bono de Desarrollo de Negocio: solo el primer mes de actividad del consultor nuevo.
+BDN_TIERS = [
+    {"consultants": 1, "percent": 5},
+    {"consultants": 2, "percent": 10},
+    {"consultants": 3, "percent": 20},
+]
+RETAIL_MARGIN = {"min": 5, "max": 30}
+
+INCOME_DISCLAIMER = (
+    "Las cifras son estimaciones con base en el plan de compensación y en lo que registras. "
+    "No son una garantía ni una proyección de ingresos reales: el resultado depende de tu esfuerzo de ventas."
+)
+
+
+def rank_index(key: str) -> int:
+    try:
+        return RANK_KEYS.index(key)
+    except ValueError:
+        return 0
+
+
+def days_left_in_month() -> int:
+    hoy = date.today()
+    ultimo = calendar.monthrange(hoy.year, hoy.month)[1]
+    return ultimo - hoy.day
+
+
+def tier_for(value: int, tiers: list[dict], field: str) -> dict | None:
+    alcanzado = None
+    for tier in tiers:
+        if value >= tier[field]:
+            alcanzado = tier
+    return alcanzado
+
+
+def next_tier(value: int, tiers: list[dict], field: str) -> dict | None:
+    for tier in tiers:
+        if value < tier[field]:
+            return tier
+    return None
+
+
 SCHEMA_STATEMENTS = [
     """
 CREATE TABLE IF NOT EXISTS users (
@@ -136,6 +212,7 @@ CREATE TABLE IF NOT EXISTS users (
   dominant_profile TEXT NOT NULL,
   xp INTEGER NOT NULL DEFAULT 0,
   streak INTEGER NOT NULL DEFAULT 0,
+  rank TEXT NOT NULL DEFAULT 'Empresario',
   target_income REAL NOT NULL DEFAULT 0,
   goal_date TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -164,6 +241,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   estimated_objective TEXT DEFAULT '',
   products TEXT DEFAULT '',
   monthly_consumption REAL NOT NULL DEFAULT 0,
+  volume_points REAL NOT NULL DEFAULT 0,
   next_action TEXT DEFAULT '',
   next_action_date TEXT,
   last_contact TEXT,
@@ -194,6 +272,8 @@ CREATE TABLE IF NOT EXISTS daily_metrics (
   new_clients INTEGER NOT NULL DEFAULT 0,
   new_associates INTEGER NOT NULL DEFAULT 0,
   sales REAL NOT NULL DEFAULT 0,
+  volume_points REAL NOT NULL DEFAULT 0,
+  client_orders INTEGER NOT NULL DEFAULT 0,
   products_sold TEXT DEFAULT ''
 )""",
     """
@@ -260,6 +340,9 @@ ACHIEVEMENT_CATALOG = [
     ("mentor", "Mentoría en camino", "Acompaña a tu primer asociado.", "🏅"),
     ("first-sale", "Primera venta", "Registra tu primera venta del mes.", "💫"),
     ("level-5", "Nivel 5 alcanzado", "Acumula 1,000 XP de experiencia.", "⭐"),
+    ("vvp-400", "Volumen de Miembro", "Acumula 400 VVP en un mes: el requisito para calificar como Consultor Miembro.", "📦"),
+    ("client-bonus", "Bono desbloqueado", "Consigue 3 pedidos de cliente de 400+ VP en un mes y activa el Bono por Volumen de Clientes.", "🎯"),
+    ("bdn-max", "Desarrollo al máximo", "Inscribe 3 consultores en un mismo mes y lleva tu BDN al 20%.", "🚀"),
 ]
 
 
@@ -295,12 +378,16 @@ def initialize_database() -> None:
         ensure_column(db, "users", "email", "TEXT NOT NULL DEFAULT ''")
         ensure_column(db, "users", "phone", "TEXT NOT NULL DEFAULT ''")
         ensure_column(db, "users", "city", "TEXT NOT NULL DEFAULT ''")
+        ensure_column(db, "users", "rank", "TEXT NOT NULL DEFAULT 'Empresario'")
+        ensure_column(db, "daily_metrics", "volume_points", "REAL NOT NULL DEFAULT 0")
+        ensure_column(db, "daily_metrics", "client_orders", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column(db, "contacts", "volume_points", "REAL NOT NULL DEFAULT 0")
         sync_achievement_catalog(db)
         if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
             return
 
         db.execute(
-            "INSERT INTO users (id,name,purpose,dominant_profile,xp,streak,target_income,goal_date) VALUES (1,?,?,?,?,?,?,?)",
+            "INSERT INTO users (id,name,purpose,dominant_profile,xp,streak,target_income,goal_date,rank) VALUES (1,?,?,?,?,?,?,?,'Asociado')",
             (
                 "Mariana Torres",
                 "Construyo mi negocio para cuidar mi salud, alcanzar libertad financiera y ayudar a otras personas a crecer.",
@@ -347,13 +434,13 @@ def initialize_database() -> None:
             ],
         )
         db.executemany(
-            "INSERT INTO daily_metrics (metric_date,new_prospects,presentations,new_clients,new_associates,sales,products_sold) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO daily_metrics (metric_date,new_prospects,presentations,new_clients,new_associates,sales,volume_points,client_orders,products_sold) VALUES (?,?,?,?,?,?,?,?,?)",
             [
-                (day_offset(-4), 3, 2, 1, 0, 4200, "Platinum x1, Sport x1"),
-                (day_offset(-3), 2, 1, 0, 1, 3100, "Classic x1"),
-                (day_offset(-2), 5, 3, 2, 0, 7800, "Platinum x2, Sport x1"),
-                (day_offset(-1), 4, 2, 1, 1, 6400, "Platinum x1, Classic x2"),
-                (day_offset(0), 2, 1, 1, 0, 3200, "Platinum x1"),
+                (day_offset(-4), 3, 2, 1, 0, 4200, 600, 1, "Platinum x1, Sport x1"),
+                (day_offset(-3), 2, 1, 0, 1, 3100, 440, 1, "Classic x1"),
+                (day_offset(-2), 5, 3, 2, 0, 7800, 1120, 2, "Platinum x2, Sport x1"),
+                (day_offset(-1), 4, 2, 1, 1, 6400, 920, 1, "Platinum x1, Classic x2"),
+                (day_offset(0), 2, 1, 1, 0, 3200, 460, 1, "Platinum x1"),
             ],
         )
         db.executemany(
@@ -403,6 +490,9 @@ def achievement_stats(db) -> dict:
         "goals": db.execute("SELECT COUNT(*) FROM goals").fetchone()[0],
         "streak": compute_streak(db),
         "sales": db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics").fetchone()[0],
+        "month_vvp": db.execute("SELECT COALESCE(SUM(volume_points),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0],
+        "month_orders": db.execute("SELECT COALESCE(SUM(client_orders),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0],
+        "month_consultants": db.execute("SELECT COALESCE(SUM(new_associates),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0],
     }
 
 
@@ -414,6 +504,9 @@ ACHIEVEMENT_RULES = {
     "mentor": lambda s: s["associates"] >= 1,
     "first-sale": lambda s: s["sales"] > 0,
     "level-5": lambda s: s["xp"] >= 1000,
+    "vvp-400": lambda s: s["month_vvp"] >= 400,
+    "client-bonus": lambda s: s["month_orders"] >= CLIENT_BONUS_TIERS[0]["clients"],
+    "bdn-max": lambda s: s["month_consultants"] >= BDN_TIERS[-1]["consultants"],
 }
 
 
@@ -438,6 +531,138 @@ def sync_progress(db) -> list[dict]:
     month_sales = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0]
     db.execute("UPDATE goals SET current=? WHERE unit='MXN'", (month_sales,))
     return evaluate_achievements(db)
+
+
+def compensation_snapshot(db) -> dict:
+    """Traduce lo registrado este mes a los términos del plan de compensación."""
+    mes = f"{today()[:7]}-%"
+    totales = fetch_one(db, """SELECT
+        COALESCE(SUM(volume_points),0) vvp,
+        COALESCE(SUM(client_orders),0) pedidos,
+        COALESCE(SUM(new_associates),0) consultores,
+        COALESCE(SUM(new_clients),0) clientes,
+        COALESCE(SUM(sales),0) ventas
+        FROM daily_metrics WHERE metric_date LIKE ?""", (mes,)) or {}
+
+    vvp = float(totales.get("vvp") or 0)
+    pedidos = int(totales.get("pedidos") or 0)
+    consultores = int(totales.get("consultores") or 0)
+    restantes = days_left_in_month()
+
+    usuario = fetch_one(db, "SELECT rank FROM users WHERE id=1") or {}
+    indice = rank_index(usuario.get("rank") or "Empresario")
+    actual = RANKS[indice]
+    siguiente = RANKS[indice + 1] if indice + 1 < len(RANKS) else None
+
+    mantenimiento = actual["maintenance"]
+    falta_mantener = max(0, mantenimiento - vvp)
+
+    bono_clientes = tier_for(pedidos, CLIENT_BONUS_TIERS, "clients")
+    siguiente_clientes = next_tier(pedidos, CLIENT_BONUS_TIERS, "clients")
+    bdn = tier_for(consultores, BDN_TIERS, "consultants")
+    siguiente_bdn = next_tier(consultores, BDN_TIERS, "consultants")
+
+    # Clientes cuyo consumo registrado ya califica para el bono.
+    clientes_calificados = db.execute(
+        "SELECT COUNT(*) FROM contacts WHERE kind='Cliente' AND volume_points >= ?", (QUALIFYING_ORDER_VP,)
+    ).fetchone()[0]
+
+    return {
+        "disclaimer": INCOME_DISCLAIMER,
+        "days_left": restantes,
+        "month_vvp": vvp,
+        "month_orders": pedidos,
+        "month_consultants": consultores,
+        "month_sales": float(totales.get("ventas") or 0),
+        "qualifying_clients": clientes_calificados,
+        "qualifying_order_vp": QUALIFYING_ORDER_VP,
+        "retail_margin": RETAIL_MARGIN,
+        "rank": {
+            "key": actual["key"],
+            "label": actual["label"],
+            "maintenance": mantenimiento,
+            "maintenance_missing": falta_mantener,
+            "maintenance_met": falta_mantener == 0,
+            "progress": min(100, round((vvp / mantenimiento) * 100)) if mantenimiento else 100,
+        },
+        "next_rank": {
+            "key": siguiente["key"],
+            "label": siguiente["label"],
+            "requirement": siguiente["requirement"],
+            "promotion_bonus": siguiente["promotion_bonus"],
+            "tracked_by_app": siguiente["tracked_by_app"],
+            "requirement_vvp": siguiente["requirement_vvp"],
+            "vvp_progress": min(100, round((vvp / siguiente["requirement_vvp"]) * 100)) if siguiente["requirement_vvp"] else 0,
+        } if siguiente else None,
+        "client_bonus": {
+            "percent": bono_clientes["percent"] if bono_clientes else 0,
+            "label": bono_clientes["label"] if bono_clientes else "Sin nivel todavía",
+            "next_percent": siguiente_clientes["percent"] if siguiente_clientes else None,
+            "next_clients": siguiente_clientes["clients"] if siguiente_clientes else None,
+            "missing": max(0, siguiente_clientes["clients"] - pedidos) if siguiente_clientes else 0,
+        },
+        "bdn": {
+            "percent": bdn["percent"] if bdn else 0,
+            "next_percent": siguiente_bdn["percent"] if siguiente_bdn else None,
+            "missing": max(0, siguiente_bdn["consultants"] - consultores) if siguiente_bdn else 0,
+        },
+        "alerts": compensation_alerts(vvp, pedidos, consultores, restantes, actual, siguiente,
+                                      bono_clientes, siguiente_clientes, bdn, siguiente_bdn),
+    }
+
+
+def compensation_alerts(vvp, pedidos, consultores, restantes, actual, siguiente,
+                        bono_clientes, siguiente_clientes, bdn, siguiente_bdn) -> list[dict]:
+    """Avisos accionables: qué falta, cuánto y hasta cuándo."""
+    plazo = "hoy es el último día del mes" if restantes == 0 else f"quedan {restantes} día{'s' if restantes != 1 else ''} del mes"
+    avisos = []
+
+    falta = max(0, actual["maintenance"] - vvp)
+    if actual["maintenance"] and falta > 0:
+        avisos.append({
+            "tone": "urgent" if restantes <= 7 else "warning",
+            "title": f"Te faltan {falta:,.0f} VVP para mantener {actual['label']}",
+            "message": f"Llevas {vvp:,.0f} de {actual['maintenance']:,} VVP y {plazo}.",
+        })
+    elif actual["maintenance"]:
+        avisos.append({
+            "tone": "success",
+            "title": f"Rango {actual['label']} asegurado este mes",
+            "message": f"Llevas {vvp:,.0f} VVP y el mínimo es {actual['maintenance']:,}.",
+        })
+
+    if siguiente and siguiente["tracked_by_app"] and siguiente["requirement_vvp"]:
+        faltan = max(0, siguiente["requirement_vvp"] - vvp)
+        if faltan > 0:
+            avisos.append({
+                "tone": "info",
+                "title": f"A {faltan:,.0f} VVP de alcanzar {siguiente['label']}",
+                "message": f"{siguiente['requirement']} Ya llevas {vvp:,.0f} VVP este mes.",
+            })
+
+    if siguiente_clientes:
+        faltan = max(0, siguiente_clientes["clients"] - pedidos)
+        actual_pct = bono_clientes["percent"] if bono_clientes else 0
+        avisos.append({
+            "tone": "info",
+            "title": f"Con {faltan} cliente{'s' if faltan != 1 else ''} más pasas al {siguiente_clientes['percent']}% del Bono por Volumen de Clientes",
+            "message": f"Llevas {pedidos} pedido{'s' if pedidos != 1 else ''} de {QUALIFYING_ORDER_VP}+ VP este mes"
+                       + (f" ({actual_pct}% actual)." if actual_pct else ". El bono arranca con 3 clientes.")
+                       + f" Recuerda que {plazo}.",
+        })
+
+    if siguiente_bdn:
+        faltan = max(0, siguiente_bdn["consultants"] - consultores)
+        actual_pct = bdn["percent"] if bdn else 0
+        avisos.append({
+            "tone": "warning" if restantes <= 10 else "info",
+            "title": f"Con {faltan} consultor{'es' if faltan != 1 else ''} más tu BDN sube al {siguiente_bdn['percent']}%",
+            "message": f"Inscribiste {consultores} este mes"
+                       + (f" ({actual_pct}% actual)." if actual_pct else ".")
+                       + f" El Bono de Desarrollo de Negocio solo aplica el primer mes de cada consultor nuevo, y {plazo}.",
+        })
+
+    return avisos
 
 
 def week_activity(db) -> list[dict]:
@@ -483,6 +708,7 @@ def dashboard_payload(db) -> dict:
             "month_associates": month_totals.get("associates", 0),
         },
         "week_activity": week_activity(db),
+        "compensation": compensation_snapshot(db),
         "goals": rows(db.execute("SELECT * FROM goals ORDER BY id")),
         "achievements": rows(db.execute("SELECT * FROM achievements ORDER BY unlocked_at IS NULL, unlocked_at DESC, id")),
         "new_achievements": new_achievements,
@@ -613,6 +839,8 @@ class AppHandler(BaseHTTPRequestHandler):
                 self.export_data(db)
             elif parsed.path == "/api/dashboard":
                 self.send_json(dashboard_payload(db))
+            elif parsed.path == "/api/compensation":
+                self.send_json({**compensation_snapshot(db), "ranks": RANKS})
             elif parsed.path == "/api/tasks":
                 query = parse_qs(parsed.query)
                 due = query.get("date", [today()])[0]
@@ -652,6 +880,7 @@ class AppHandler(BaseHTTPRequestHandler):
             "estimated_objective": clean_text(data.get("estimated_objective"), 120, "El objetivo"),
             "products": clean_text(data.get("products"), 200, "El campo de productos"),
             "monthly_consumption": clean_number(data.get("monthly_consumption"), "El consumo mensual", 0, 10_000_000),
+            "volume_points": clean_number(data.get("volume_points"), "Los puntos de volumen", 0, 1_000_000),
             "next_action": clean_text(data.get("next_action"), 300, "La próxima acción"),
             "next_action_date": clean_date(data.get("next_action_date"), "La próxima fecha"),
             "last_contact": clean_date(data.get("last_contact"), "La fecha del último contacto"),
@@ -822,15 +1051,21 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def save_metrics(self) -> None:
         data = self.read_json()
-        metric_date = data.get("metric_date") or today()
-        fields = ["new_prospects", "presentations", "new_clients", "new_associates", "sales", "products_sold"]
-        values = [data.get(field, 0) for field in fields]
+        metric_date = clean_date(data.get("metric_date"), "La fecha del registro") or today()
+        etiquetas = {
+            "new_prospects": "Los prospectos nuevos", "presentations": "Las presentaciones",
+            "new_clients": "Los clientes nuevos", "new_associates": "Los asociados nuevos",
+            "sales": "Las ventas", "volume_points": "Los puntos de volumen", "client_orders": "Los pedidos de clientes",
+        }
+        values = [clean_number(data.get(field), etiquetas[field], 0, 10_000_000) for field in etiquetas]
+        values.append(clean_text(data.get("products_sold"), 300, "Los productos vendidos"))
         with connect() as db:
             db.execute(
-                """INSERT INTO daily_metrics (metric_date,new_prospects,presentations,new_clients,new_associates,sales,products_sold)
-                VALUES (?,?,?,?,?,?,?) ON CONFLICT(metric_date) DO UPDATE SET
+                """INSERT INTO daily_metrics (metric_date,new_prospects,presentations,new_clients,new_associates,sales,volume_points,client_orders,products_sold)
+                VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(metric_date) DO UPDATE SET
                 new_prospects=excluded.new_prospects,presentations=excluded.presentations,new_clients=excluded.new_clients,
-                new_associates=excluded.new_associates,sales=excluded.sales,products_sold=excluded.products_sold""",
+                new_associates=excluded.new_associates,sales=excluded.sales,volume_points=excluded.volume_points,
+                client_orders=excluded.client_orders,products_sold=excluded.products_sold""",
                 [metric_date] + values,
             )
             db.execute("UPDATE users SET xp=xp+15 WHERE id=1")
@@ -863,11 +1098,12 @@ class AppHandler(BaseHTTPRequestHandler):
             clean_text(data.get("purpose"), 800, "Tu propósito"),
             clean_number(data.get("target_income"), "La meta de ingresos", 0, 100_000_000),
             clean_date(data.get("goal_date"), "La fecha objetivo"),
+            clean_choice(data.get("rank"), set(RANK_KEYS), "El rango", "Empresario"),
         )
         with connect() as db:
             db.execute(
                 """UPDATE users SET name=?,gender=?,email=?,phone=?,city=?,
-                purpose=?,target_income=?,goal_date=? WHERE id=1""",
+                purpose=?,target_income=?,goal_date=?,rank=? WHERE id=1""",
                 values,
             )
             user = fetch_one(db, "SELECT * FROM users WHERE id=1")
