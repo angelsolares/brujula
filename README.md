@@ -38,7 +38,12 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 | GET/POST | `/api/metrics` | Historial y registro diario de resultados. |
 | PATCH | `/api/goals/<id>` | Ajustar avance y objetivo de una meta. |
 | PATCH | `/api/development/<id>` | Actualizar el progreso de una ruta de desarrollo. |
-| PATCH | `/api/profile` | Editar datos personales y meta mensual. |
+| PATCH | `/api/profile` | Editar datos personales, rango y meta mensual. |
+| GET/POST | `/api/capture-sessions` | Listar y crear sesiones de captura por QR. |
+| PATCH/DELETE | `/api/capture-sessions/<id>` | Abrir, cerrar, renombrar o eliminar una sesión. |
+| GET | `/api/capture-sessions/<id>/qr.svg` | Código QR de la sesión en SVG. |
+| GET | `/captura/<token>` | **Público.** Formulario que la persona llena desde su celular. |
+| GET/POST | `/api/captura/<token>` | **Público.** Consulta la sesión y recibe el registro. |
 | POST | `/api/profile/scores` | Guardar el resultado del test de perfiles. |
 
 ## Módulos incluidos
@@ -57,6 +62,23 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 - Representación visual femenina, masculina o neutral que adapta las ilustraciones del tablero, mapa y brújula.
 - Rutas de capacitación y desarrollo personal.
 - Guía interactiva con recorrido guiado, simulador de niveles, reglas de XP, manual del CRM, perfiles, plan de primera semana y preguntas frecuentes.
+
+## Captura por QR
+
+Para registrar a varias personas a la vez en una plática. Desde **Mi red → Captura por QR**
+se crea una sesión con su propio código; cada asistente lo escanea y llena sus datos en
+`/captura/<token>` desde su celular, incluido un espacio privado para escribir qué quiere
+mejorar de su salud. Los registros entran a la red como prospectos marcados con ▦ y con
+un seguimiento agendado para el día siguiente.
+
+Ese endpoint **escribe sin autenticación**, que es justamente lo que lo hace útil. Lo que
+lo acota:
+
+- El enlace lleva un token aleatorio: no se adivina.
+- La sesión se cierra al terminar el evento y el código deja de funcionar.
+- Hay un tope de envíos por IP (`CAPTURE_RATE_LIMIT`), alto a propósito porque en un
+  evento todos los asistentes comparten la IP del WiFi del lugar.
+- Solo permite crear contactos; no expone ni modifica nada más.
 
 ## Plan de compensación
 

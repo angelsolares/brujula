@@ -105,7 +105,10 @@
       <section class="view" id="view-contacts">
         <div class="page-intro">
           <div><span class="mini-kicker">CENTRO DE DESARROLLO</span><h2>Mi red</h2><p>Haz visible cada relación, el interés y el siguiente paso.</p></div>
-          <button class="primary-button" data-open-contact>＋ Agregar persona</button>
+          <div class="page-intro-actions">
+            <button class="secondary-button" id="openCapture">▦ Captura por QR</button>
+            <button class="primary-button" data-open-contact>＋ Agregar persona</button>
+          </div>
         </div>
         <div class="contact-summary" id="contactSummary"></div>
         <article class="panel contacts-panel">
@@ -309,6 +312,16 @@
             <article class="panel how-card"><span class="how-number">03</span><i>→</i><h3>Haz avanzar la etapa</h3><p>Al final de cada fila tienes tres acciones: <b>→</b> mueve a la persona a la siguiente etapa, <b>✎</b> abre sus datos para corregirlos y <b>🗑</b> la elimina de tu red.</p><small>CLAVE · VISIBILIDAD</small></article>
             <article class="panel how-card"><span class="how-number">04</span><i>⌁</i><h3>Define el siguiente paso</h3><p>Nunca cierres una conversación sin una acción y una fecha claras para continuar.</p><small>CLAVE · CONSTANCIA</small></article>
           </div>
+          <div class="capture-guide">
+            <div class="capture-guide-head"><div><span class="mini-kicker">REGISTRO EN GRUPO</span><h3>Captura por QR en tus pláticas</h3><p>En vez de pasar una hoja o anotar a mano, proyecta un código y deja que cada persona capture sus propios datos desde su celular. Todos pueden llenarlo al mismo tiempo.</p></div><button class="primary-button" data-go-view="contacts">Abrir Mi red</button></div>
+            <div class="capture-steps">
+              <article><span>1</span><strong>Crea la sesión</strong><p>En <b>Mi red</b> entra a <b>Captura por QR</b> y ponle el nombre de la plática. Se genera un código y un enlace únicos.</p></article>
+              <article><span>2</span><strong>Muestra el código</strong><p>Usa <b>Ver en grande</b> para proyectarlo, o comparte el enlace por WhatsApp si la plática es a distancia.</p></article>
+              <article><span>3</span><strong>Cada quien se registra</strong><p>Escanean con la cámara y llenan sus datos. Ahí escriben con confianza lo que quieren mejorar de su salud, algo que muchas personas no dicen frente al grupo.</p></article>
+              <article><span>4</span><strong>Entran solos a tu red</strong><p>Aparecen como prospectos con la etiqueta ▦, su interés clasificado y un seguimiento agendado para el día siguiente.</p></article>
+            </div>
+            <div class="route-tip"><span>🔒</span><div><strong>Cierra el registro al terminar</strong><p>Mientras la sesión esté abierta, cualquiera con el enlace puede enviar datos. Al cerrarla el código deja de funcionar y tus registros quedan intactos. Lo que la gente escribe sobre su salud solo lo ves tú.</p></div></div>
+          </div>
           <div class="route-tip"><span>🗑</span><div><strong>Eliminar es definitivo</strong><p>Antes de borrar una persona o una misión te pedimos confirmación, porque no hay forma de recuperarla. Si quieres conservar una copia de todo, usa <b>Descargar respaldo</b> en las dudas frecuentes.</p></div><button data-guide-section="guideFaq">Ir al respaldo →</button></div>
           <div class="field-anatomy panel">
             <div class="contact-demo"><span class="demo-avatar">AR</span><div><strong>Ana Robles</strong><small>Prospecto · Interés alto</small></div><em>Presentación</em></div>
@@ -378,6 +391,7 @@
             <details open><summary>¿Dónde se guarda mi información?<span>＋</span></summary><p>Depende de cómo abras BRÚJULA. En tu computadora los datos viven en el archivo local <b>data/brujula.db</b>; en la versión publicada en internet se guardan en una base de datos en la nube (Turso) vinculada a esta aplicación. Puedes confirmar cuál estás usando en <b id="faqStorageMode">/api/health</b>.</p></details>
             <details><summary>¿Pierdo mis XP cuando subo de nivel?<span>＋</span></summary><p>No. La experiencia es acumulativa. Cada 250 XP aumenta tu nivel y la barra comienza el tramo hacia el siguiente.</p></details>
             <details><summary>¿Qué diferencia hay entre misión, meta y ruta?<span>＋</span></summary><p>Una <b>misión</b> es una acción de hoy; una <b>meta</b> es un resultado medible; una <b>ruta</b> desarrolla una habilidad a lo largo del tiempo.</p></details>
+            <details><summary>¿Cómo registro a varias personas en una plática?<span>＋</span></summary><p>En <b>Mi red</b> abre <b>Captura por QR</b>, crea una sesión con el nombre del evento y proyecta el código. Cada asistente lo escanea y llena sus datos desde su celular al mismo tiempo; los registros entran solos a tu red con la etiqueta ▦. Al terminar, cierra el registro para que el enlace deje de funcionar.</p></details>
             <details><summary>¿Puedo crear mis propias misiones?<span>＋</span></summary><p>Sí. En <b>Agenda de hoy</b> usa el botón <b>＋ Nueva misión</b>: eliges el título, la categoría, el perfil, la fecha, la hora y cuántos XP vale. Con <b>✎</b> la editas y con <b>🗑</b> la eliminas.</p></details>
             <details><summary>¿Puedo corregir o borrar algo que registré mal?<span>＋</span></summary><p>Sí. Tanto en <b>Mi red</b> como en <b>Agenda de hoy</b> cada elemento tiene un botón para editar (<b>✎</b>) y otro para eliminar (<b>🗑</b>). Al eliminar te pedimos confirmación, porque no se puede deshacer.</p></details>
             <details><summary>¿Cómo se calcula mi racha?<span>＋</span></summary><p>Son los días seguidos en que guardaste tu avance en <b>Medir avances</b>. No depende de completar misiones. Si te saltas un día completo, la cuenta vuelve a cero; mientras el día siga en curso, tu racha se mantiene aunque todavía no registres.</p></details>
@@ -432,6 +446,46 @@
       </div>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close-modal>Cancelar</button><button type="submit" class="primary-button" id="contactSubmitButton">Guardar contacto +25 XP</button></div>
     </form>
+  </dialog>
+
+  <dialog id="captureDialog" class="modal capture-modal">
+    <div class="capture-shell">
+      <div class="modal-head"><div><span class="mini-kicker">REGISTRO EN GRUPO</span><h2>Captura por QR</h2><p>Proyecta el código en tu plática y cada persona llena sus datos desde su celular. Los registros entran solos a Mi red.</p></div><button type="button" data-close-capture aria-label="Cerrar">×</button></div>
+
+      <form id="captureSessionForm" class="capture-create" novalidate>
+        <label><span>Nombre de la plática o evento</span><input name="title" maxlength="120" placeholder="Ej. Plática Ciudad Juárez · 30 de julio" required></label>
+        <button type="submit" class="primary-button" id="captureCreateButton">Crear enlace y QR</button>
+      </form>
+
+      <div class="capture-active" id="captureActive" hidden>
+        <div class="capture-qr-side">
+          <div class="capture-qr" id="captureQr"></div>
+          <button type="button" class="secondary-button" id="captureFullscreen">Ver en grande para proyectar</button>
+        </div>
+        <div class="capture-details">
+          <span class="mini-kicker">SESIÓN ACTIVA</span>
+          <h3 id="captureTitle">—</h3>
+          <label class="capture-link"><span>Enlace directo</span><div><input id="captureUrl" readonly><button type="button" id="captureCopy">Copiar</button></div></label>
+          <div class="capture-count"><strong id="captureCount">0</strong><small>REGISTROS RECIBIDOS</small></div>
+          <div class="capture-actions">
+            <button type="button" class="secondary-button" id="captureToggle">Cerrar registro</button>
+            <button type="button" class="secondary-button" id="captureRefresh">Actualizar</button>
+          </div>
+          <p class="capture-hint">Al terminar la plática cierra el registro: el enlace deja de funcionar y nadie más puede enviar datos.</p>
+        </div>
+      </div>
+
+      <div class="capture-history" id="captureHistory"></div>
+    </div>
+  </dialog>
+
+  <dialog id="qrFullscreenDialog" class="modal qr-fullscreen">
+    <div class="qr-fullscreen-shell">
+      <h2 id="qrFullscreenTitle">Escanea para registrarte</h2>
+      <div id="qrFullscreenCode"></div>
+      <p id="qrFullscreenUrl"></p>
+      <button type="button" class="secondary-button" id="qrFullscreenClose">Cerrar</button>
+    </div>
   </dialog>
 
   <dialog id="taskDialog" class="modal">

@@ -1,4 +1,4 @@
-const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", search: "", editingContactId: null, editingTaskId: null, version: null, ranks: [] };
+const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", search: "", editingContactId: null, editingTaskId: null, version: null, ranks: [], captureSession: null, captureSessions: [] };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -644,7 +644,7 @@ function renderContactSummary(counts) {
 
 function contactRow(contact) {
   return `<tr>
-    <td><div class="contact-name"><span class="person-avatar" style="color:${typeColors[contact.kind]};background:${typeColors[contact.kind]}16">${initials(contact.name)}</span><div><strong>${escapeHtml(contact.name)}</strong><span>${escapeHtml(contact.source)}</span></div></div></td>
+    <td><div class="contact-name"><span class="person-avatar" style="color:${typeColors[contact.kind]};background:${typeColors[contact.kind]}16">${initials(contact.name)}</span><div><strong>${escapeHtml(contact.name)}${contact.capture_session_id ? '<i class="qr-tag" title="Se registró desde el QR">▦</i>' : ""}</strong><span>${escapeHtml(contact.source)}</span></div></div></td>
     <td><span class="type-pill type-${contact.kind}">${escapeHtml(contact.kind)}</span></td>
     <td><span class="interest-pill interest-${contact.interest}">${escapeHtml(contact.interest)}</span></td>
     <td><span class="stage-pill">${escapeHtml(contact.stage)}</span></td>
@@ -708,6 +708,127 @@ async function deleteContact(contactId) {
     await Promise.all([loadDashboard(), loadContacts()]);
   } catch (error) { toast(error.message, "error"); }
   finally { setBusy("#contactRows", false); }
+}
+
+// --- Captura por QR ---------------------------------------------------------
+
+function renderCaptureSession(sesion) {
+  state.captureSession = sesion;
+  const activa = $("#captureActive");
+  if (!sesion) { activa.hidden = true; return; }
+  activa.hidden = false;
+  $("#captureTitle").textContent = sesion.title;
+  $("#captureUrl").value = sesion.url || `${location.origin}/captura/${sesion.token}`;
+  $("#captureCount").textContent = sesion.registros ?? 0;
+  $("#captureQr").innerHTML = `<img src="/api/capture-sessions/${sesion.id}/qr.svg?v=${Date.now()}" alt="Código QR para registrarse en ${escapeHtml(sesion.title)}">`;
+  $("#captureToggle").textContent = sesion.active ? "Cerrar registro" : "Reabrir registro";
+  activa.classList.toggle("is-closed", !sesion.active);
+}
+
+function renderCaptureHistory(sesiones) {
+  const otras = sesiones.filter((s) => s.id !== state.captureSession?.id);
+  $("#captureHistory").innerHTML = otras.length ? `
+    <span class="mini-kicker">OTRAS SESIONES</span>
+    <div class="capture-history-list">${otras.map((s) => `
+      <div class="capture-history-item ${s.active ? "open" : ""}">
+        <div><strong>${escapeHtml(s.title)}</strong><small>${s.registros} registro${s.registros === 1 ? "" : "s"} · ${s.active ? "abierta" : "cerrada"}</small></div>
+        <div class="capture-history-actions">
+          <button class="row-action" data-show-session="${s.id}" title="Ver su QR">▦</button>
+          <button class="row-action danger" data-delete-session="${s.id}" title="Eliminar">🗑</button>
+        </div>
+      </div>`).join("")}</div>` : "";
+  $$("[data-show-session]").forEach((b) => b.addEventListener("click", async () => {
+    renderCaptureSession(state.captureSessions.find((s) => s.id === Number(b.dataset.showSession)));
+    renderCaptureHistory(state.captureSessions);
+  }));
+  $$("[data-delete-session]").forEach((b) => b.addEventListener("click", () => deleteCaptureSession(Number(b.dataset.deleteSession))));
+}
+
+async function loadCaptureSessions(preferId = null) {
+  try {
+    state.captureSessions = await api("/api/capture-sessions");
+    const elegida = preferId
+      ? state.captureSessions.find((s) => s.id === preferId)
+      : state.captureSessions.find((s) => s.active) || state.captureSessions[0];
+    renderCaptureSession(elegida || null);
+    renderCaptureHistory(state.captureSessions);
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function submitCaptureSession(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  limpiarErrores(form);
+  const titulo = form.elements.title.value.trim();
+  if (!titulo) return marcarError(form, "title", "Ponle un nombre para reconocer de dónde vienen los registros.");
+  await withLoading($("#captureCreateButton"), async () => {
+    try {
+      const sesion = await api("/api/capture-sessions", { method: "POST", body: JSON.stringify({ title: titulo }) });
+      form.reset();
+      toast("Sesión lista: ya puedes mostrar el QR", "success");
+      await loadCaptureSessions(sesion.id);
+    } catch (error) { toast(error.message, "error"); }
+  });
+}
+
+async function toggleCaptureSession() {
+  const sesion = state.captureSession;
+  if (!sesion) return;
+  if (sesion.active) {
+    const ok = await confirmar({
+      title: "Cerrar el registro",
+      message: `Nadie más podrá enviar datos desde el QR de “${sesion.title}”. Puedes reabrirlo cuando quieras.`,
+      confirmText: "Sí, cerrar",
+      danger: false,
+    });
+    if (!ok) return;
+  }
+  try {
+    await api(`/api/capture-sessions/${sesion.id}`, { method: "PATCH", body: JSON.stringify({ active: !sesion.active }) });
+    toast(sesion.active ? "Registro cerrado" : "Registro reabierto", "success");
+    await loadCaptureSessions(sesion.id);
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function deleteCaptureSession(sessionId) {
+  const sesion = state.captureSessions.find((s) => s.id === sessionId);
+  const ok = await confirmar({
+    title: "Eliminar la sesión",
+    message: `Se borra “${sesion ? sesion.title : "esta sesión"}” y su QR deja de servir. Las personas ya registradas se quedan en tu red.`,
+    confirmText: "Sí, eliminar",
+  });
+  if (!ok) return;
+  try {
+    const result = await api(`/api/capture-sessions/${sessionId}`, { method: "DELETE" });
+    toast(result.message, "success");
+    if (state.captureSession?.id === sessionId) state.captureSession = null;
+    await loadCaptureSessions();
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function refreshCaptureCount() {
+  const sesion = state.captureSession;
+  if (!sesion) return;
+  const antes = sesion.registros ?? 0;
+  await loadCaptureSessions(sesion.id);
+  const ahora = state.captureSession?.registros ?? 0;
+  toast(ahora > antes ? `¡Llegaron ${ahora - antes} registro${ahora - antes === 1 ? "" : "s"} nuevo${ahora - antes === 1 ? "" : "s"}!` : "Sin registros nuevos todavía",
+        ahora > antes ? "success" : "info");
+  if (ahora > antes) await Promise.all([loadDashboard(), loadContacts()]);
+}
+
+function openCaptureDialog() {
+  $("#captureDialog").showModal();
+  loadCaptureSessions(state.captureSession?.id || null);
+}
+
+function openQrFullscreen() {
+  const sesion = state.captureSession;
+  if (!sesion) return;
+  $("#qrFullscreenTitle").textContent = sesion.title;
+  $("#qrFullscreenCode").innerHTML = `<img src="/api/capture-sessions/${sesion.id}/qr.svg?v=${Date.now()}" alt="Código QR para registrarse">`;
+  $("#qrFullscreenUrl").textContent = $("#captureUrl").value;
+  $("#qrFullscreenDialog").showModal();
 }
 
 function openContactDialog(contactId = null) {
@@ -841,6 +962,23 @@ function bindEvents() {
   $("#taskForm").addEventListener("submit", submitTask);
   $("#openPurposeEdit").addEventListener("click", openProfileDialog);
   $("#openRankEdit").addEventListener("click", openProfileDialog);
+  $("#openCapture").addEventListener("click", openCaptureDialog);
+  $$('[data-close-capture]').forEach((b) => b.addEventListener("click", () => $("#captureDialog").close()));
+  $("#captureSessionForm").addEventListener("submit", submitCaptureSession);
+  $("#captureToggle").addEventListener("click", toggleCaptureSession);
+  $("#captureRefresh").addEventListener("click", refreshCaptureCount);
+  $("#captureFullscreen").addEventListener("click", openQrFullscreen);
+  $("#qrFullscreenClose").addEventListener("click", () => $("#qrFullscreenDialog").close());
+  $("#captureCopy").addEventListener("click", async () => {
+    const url = $("#captureUrl").value;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast("Enlace copiado", "success");
+    } catch {
+      $("#captureUrl").select();
+      toast("Selecciona y copia el enlace", "info");
+    }
+  });
   $("#downloadBackup").addEventListener("click", () => { window.location.href = "/api/export"; toast("Preparando tu respaldo…"); });
   $("#reloadApp").addEventListener("click", () => location.reload());
   // Si el usuario vuelve a la pestaña tras un rato, comprobar si hay código nuevo.

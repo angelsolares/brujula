@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17234a">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Registro · BRÚJULA</title>
+  <style>
+    *,*::before,*::after { box-sizing: border-box; }
+    :root { --navy:#17234a; --purple:#7755c7; --pink:#ed5f86; --green:#55a85b; --muted:#6b7488; --line:#e4e7f0; }
+    body { margin:0; padding:0; min-height:100vh; font-family:"Segoe UI",system-ui,-apple-system,sans-serif; color:var(--navy);
+           background:linear-gradient(165deg,#1a224d,#57419f); -webkit-font-smoothing:antialiased; }
+    .wrap { max-width:520px; margin:0 auto; padding:26px 16px 44px; }
+    header { text-align:center; color:#fff; padding:14px 0 22px; }
+    .mark { width:52px; height:52px; margin:0 auto 12px; display:grid; place-items:center; border-radius:17px;
+            background:rgba(255,255,255,.14); font-size:25px; }
+    header h1 { margin:0 0 7px; font-size:23px; letter-spacing:-.03em; }
+    header p { margin:0; color:#d6c8ff; font-size:12px; line-height:1.55; }
+    .card { background:#fff; border-radius:20px; padding:24px 20px; box-shadow:0 22px 50px rgba(12,17,40,.28); }
+    label { display:block; margin-bottom:16px; }
+    label > span { display:block; margin-bottom:6px; font-size:12px; font-weight:700; }
+    label small { display:block; margin-top:5px; color:var(--muted); font-size:11px; line-height:1.5; }
+    input,textarea,select { width:100%; padding:13px 14px; border:1px solid var(--line); border-radius:12px;
+                            font:inherit; font-size:16px; background:#fbfcfe; color:var(--navy); }
+    input:focus,textarea:focus,select:focus { outline:none; border-color:var(--purple); background:#fff; }
+    textarea { resize:vertical; min-height:88px; }
+    .options { display:grid; gap:9px; }
+    .options label { margin:0; }
+    .options input { position:absolute; opacity:0; pointer-events:none; }
+    .options span.opt { display:flex; gap:11px; align-items:center; padding:13px 15px; border:1px solid var(--line);
+                        border-radius:12px; background:#fbfcfe; font-size:13px; cursor:pointer; }
+    .options span.opt b { font-weight:700; }
+    .options span.opt em { color:var(--muted); font-size:11px; font-style:normal; }
+    .options input:checked + span.opt { border-color:var(--purple); background:#f4f0ff; box-shadow:inset 0 0 0 1px var(--purple); }
+    .private { margin-top:4px; padding:13px 15px; border-radius:12px; background:#f4f0ff; color:#4b3a86;
+               font-size:11px; line-height:1.55; }
+    .consent { display:flex; gap:11px; align-items:flex-start; margin:4px 0 18px; font-size:11px; color:var(--muted); line-height:1.55; }
+    .consent input { width:19px; height:19px; margin:1px 0 0; flex:0 0 auto; }
+    button { width:100%; min-height:52px; border:0; border-radius:14px; color:#fff; font-size:15px; font-weight:800;
+             background:linear-gradient(120deg,#7755c7,#ed5f86); cursor:pointer; }
+    button:disabled { opacity:.65; cursor:progress; }
+    .error { margin-top:6px; color:var(--pink); font-size:11px; font-weight:700; }
+    .has-error input,.has-error textarea { border-color:var(--pink); background:#fff6f8; }
+    .notice { margin-top:16px; padding:14px 16px; border-radius:12px; font-size:12px; line-height:1.55; text-align:center; }
+    .notice.bad { background:#fff0f4; color:#b32a54; }
+    .done { text-align:center; padding:16px 4px; }
+    .done .tick { width:70px; height:70px; margin:0 auto 16px; display:grid; place-items:center; border-radius:50%;
+                  background:#e9f6ea; color:var(--green); font-size:34px; }
+    .done h2 { margin:0 0 9px; font-size:21px; }
+    .done p { margin:0 0 20px; color:var(--muted); font-size:13px; line-height:1.6; }
+    .done button { background:#f1f2f6; color:var(--purple); }
+    footer { margin-top:20px; text-align:center; color:#c9bdf0; font-size:10px; line-height:1.6; }
+    .skeleton { height:15px; border-radius:7px; background:#eceef5; animation:pulse 1.2s infinite; }
+    @keyframes pulse { 50% { opacity:.5; } }
+    @media (prefers-reduced-motion: reduce) { * { animation:none!important; transition:none!important; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="mark">✦</div>
+      <h1>Me gustaría conocerte</h1>
+      <p id="sessionName"><span class="skeleton" style="display:block;width:180px;margin:6px auto"></span></p>
+    </header>
+
+    <div class="card" id="card">
+      <form id="captureForm" novalidate>
+        <label>
+          <span>¿Cómo te llamas? *</span>
+          <input name="name" maxlength="120" autocomplete="name" placeholder="Tu nombre completo" required>
+        </label>
+        <label>
+          <span>Teléfono</span>
+          <input name="phone" type="tel" inputmode="tel" maxlength="40" autocomplete="tel" placeholder="656 000 0000">
+        </label>
+        <label>
+          <span>Correo</span>
+          <input name="email" type="email" inputmode="email" maxlength="160" autocomplete="email" placeholder="nombre@correo.com">
+        </label>
+
+        <label>
+          <span>¿Qué te gustaría conocer?</span>
+          <div class="options" id="interestOptions"></div>
+        </label>
+
+        <label>
+          <span>¿Qué te gustaría mejorar en tu salud o tu energía?</span>
+          <textarea name="health_profile" maxlength="600" placeholder="Cuéntame con confianza: cansancio, digestión, sueño, defensas, recuperación..."></textarea>
+          <div class="private">🔒 Esto lo lee únicamente la persona que te invitó, para poder orientarte mejor. No se comparte con el grupo ni se publica en ningún lado.</div>
+        </label>
+
+        <label>
+          <span>¿Algo más que quieras contarme?</span>
+          <textarea name="notes" maxlength="600" placeholder="Horarios en que te puedo contactar, dudas, lo que quieras."></textarea>
+        </label>
+
+        <div class="consent">
+          <input type="checkbox" id="consent" name="consent">
+          <label for="consent" style="margin:0">Acepto que estos datos se usen para darme seguimiento personal sobre los productos y la oportunidad de negocio.</label>
+        </div>
+
+        <button type="submit" id="submitButton">Enviar mis datos</button>
+        <div id="formError"></div>
+      </form>
+    </div>
+
+    <footer>Tus datos llegan directo a quien te invitó.<br>No se publican ni se comparten con terceros.</footer>
+  </div>
+
+  <script>
+    const token = location.pathname.split("/").filter(Boolean).pop();
+    const $ = (sel) => document.querySelector(sel);
+    const card = $("#card");
+
+    function fatal(message) {
+      card.innerHTML = `<div class="notice bad">${message}</div>`;
+      $("#sessionName").textContent = "";
+    }
+
+    function clearErrors() {
+      document.querySelectorAll(".has-error").forEach((el) => el.classList.remove("has-error"));
+      document.querySelectorAll(".error").forEach((el) => el.remove());
+      $("#formError").innerHTML = "";
+    }
+
+    function fieldError(name, message) {
+      const input = $(`[name="${name}"]`);
+      const holder = input.closest("label");
+      holder.classList.add("has-error");
+      const tip = document.createElement("div");
+      tip.className = "error";
+      tip.textContent = message;
+      holder.appendChild(tip);
+      input.focus();
+      input.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    async function loadSession() {
+      try {
+        const response = await fetch(`/api/captura/${token}`);
+        const data = await response.json();
+        if (!response.ok) return fatal(data.error || "No pudimos abrir este registro.");
+        $("#sessionName").textContent = data.title;
+        document.title = `${data.title} · Registro`;
+        $("#interestOptions").innerHTML = Object.entries(data.interests).map(([value, description], index) => `
+          <label>
+            <input type="radio" name="interest" value="${value}" ${index === 0 ? "checked" : ""}>
+            <span class="opt"><b>${value === "Sin definir" ? "Solo quiero información" : value}</b><em>${description}</em></span>
+          </label>`).join("");
+      } catch {
+        fatal("No hay conexión. Revisa tu internet y vuelve a intentarlo.");
+      }
+    }
+
+    function showThanks(name) {
+      card.innerHTML = `
+        <div class="done">
+          <div class="tick">✓</div>
+          <h2>¡Gracias${name ? ", " + name : ""}!</h2>
+          <p>Tus datos quedaron registrados. Muy pronto te van a contactar para platicar con calma.</p>
+          <button type="button" id="again">Registrar a otra persona</button>
+        </div>`;
+      $("#again").addEventListener("click", () => location.reload());
+    }
+
+    $("#captureForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearErrors();
+      const form = event.currentTarget;
+      const data = Object.fromEntries(new FormData(form));
+      const nombre = (data.name || "").trim();
+
+      if (!nombre) return fieldError("name", "Escribe tu nombre para poder contactarte.");
+      if (data.email && !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(data.email.trim()))
+        return fieldError("email", "Revisa tu correo: debe verse como nombre@correo.com");
+      if (!data.phone?.trim() && !data.email?.trim())
+        return fieldError("phone", "Déjanos un teléfono o un correo para poder buscarte.");
+      if (!$("#consent").checked) {
+        $("#formError").innerHTML = `<div class="error">Marca la casilla para poder darte seguimiento.</div>`;
+        return;
+      }
+
+      const button = $("#submitButton");
+      button.disabled = true;
+      button.textContent = "Enviando…";
+      try {
+        const response = await fetch(`/api/captura/${token}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "No pudimos guardar tus datos.");
+        showThanks(nombre.split(/\s+/)[0]);
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "Enviar mis datos";
+        $("#formError").innerHTML = `<div class="error">${error.message}</div>`;
+      }
+    });
+
+    loadSession();
+  </script>
+</body>
+</html>

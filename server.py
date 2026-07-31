@@ -6,11 +6,14 @@ from __future__ import annotations
 import argparse
 import calendar
 import hashlib
+import io
 import json
 import mimetypes
 import os
 import re
+import secrets
 import sqlite3
+import threading
 from datetime import date, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -247,6 +250,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   last_contact TEXT,
   birthday TEXT,
   notes TEXT DEFAULT '',
+  capture_session_id INTEGER,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )""",
     """
@@ -294,6 +298,14 @@ CREATE TABLE IF NOT EXISTS achievements (
   description TEXT NOT NULL,
   icon TEXT NOT NULL,
   unlocked_at TEXT
+)""",
+    """
+CREATE TABLE IF NOT EXISTS capture_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )""",
     """
 CREATE TABLE IF NOT EXISTS development_items (
@@ -382,6 +394,7 @@ def initialize_database() -> None:
         ensure_column(db, "daily_metrics", "volume_points", "REAL NOT NULL DEFAULT 0")
         ensure_column(db, "daily_metrics", "client_orders", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(db, "contacts", "volume_points", "REAL NOT NULL DEFAULT 0")
+        ensure_column(db, "contacts", "capture_session_id", "INTEGER")
         sync_achievement_catalog(db)
         if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
             return
@@ -665,6 +678,53 @@ def compensation_alerts(vvp, pedidos, consultores, restantes, actual, siguiente,
     return avisos
 
 
+# ---------------------------------------------------------------------------
+# Captura por QR: sesiones con enlace propio para que la gente se registre sola.
+# ---------------------------------------------------------------------------
+
+CAPTURE_INTERESTS = {
+    "Cliente": "Quiero probar los productos",
+    "Consultor": "Quiero conocer el negocio",
+    "Ambos": "Me interesan las dos cosas",
+    "Sin definir": "Todavía no lo sé",
+}
+# Tope de registros por IP dentro de la ventana. Es generoso a propósito: en una
+# plática todos los asistentes salen por la misma IP del WiFi del lugar, así que
+# un límite bajo bloquearía a personas legítimas. Frena el abuso automatizado,
+# no a una sala llena.
+CAPTURE_RATE_LIMIT = 60
+CAPTURE_RATE_WINDOW = 600
+_capture_hits: dict[str, list[float]] = {}
+_capture_lock = threading.Lock()
+
+
+def capture_rate_ok(client_ip: str) -> bool:
+    ahora = datetime.now().timestamp()
+    with _capture_lock:
+        recientes = [t for t in _capture_hits.get(client_ip, []) if ahora - t < CAPTURE_RATE_WINDOW]
+        if len(recientes) >= CAPTURE_RATE_LIMIT:
+            _capture_hits[client_ip] = recientes
+            return False
+        recientes.append(ahora)
+        _capture_hits[client_ip] = recientes
+        return True
+
+
+def new_capture_token() -> str:
+    return secrets.token_urlsafe(9)
+
+
+def find_capture_session(db, token: str) -> dict | None:
+    return fetch_one(db, "SELECT * FROM capture_sessions WHERE token=?", (token,))
+
+
+def capture_qr_svg(url: str) -> bytes:
+    import segno
+    buffer = io.BytesIO()
+    segno.make(url, error="m").save(buffer, kind="svg", scale=8, border=2, dark="#1a224d")
+    return buffer.getvalue()
+
+
 def week_activity(db) -> list[dict]:
     """Los últimos siete días con marca de actividad, para los puntos de la racha."""
     recorded = {row["metric_date"] for row in rows(db.execute("SELECT metric_date FROM daily_metrics ORDER BY metric_date DESC LIMIT 60"))}
@@ -775,6 +835,10 @@ class AppHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/"):
             self.handle_api_get(parsed)
             return
+        # El enlace del QR abre el formulario público, sea cual sea el token.
+        if parsed.path.startswith("/captura/"):
+            self.serve_static("/captura.html")
+            return
         self.serve_static(parsed.path)
 
     def do_POST(self) -> None:
@@ -790,6 +854,10 @@ class AppHandler(BaseHTTPRequestHandler):
             self.save_profile_scores()
         elif parsed.path == "/api/tasks":
             self.create_task()
+        elif parsed.path == "/api/capture-sessions":
+            self.create_capture_session()
+        elif parsed.path.startswith("/api/captura/"):
+            self.submit_capture(parsed.path.rsplit("/", 1)[-1])
         else:
             self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
 
@@ -809,6 +877,8 @@ class AppHandler(BaseHTTPRequestHandler):
             self.update_goal(self.parse_id(parts[2]))
         elif len(parts) == 3 and parts[:2] == ["api", "development"]:
             self.update_development(self.parse_id(parts[2]))
+        elif len(parts) == 3 and parts[:2] == ["api", "capture-sessions"]:
+            self.update_capture_session(self.parse_id(parts[2]))
         else:
             self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
 
@@ -822,6 +892,8 @@ class AppHandler(BaseHTTPRequestHandler):
             self.delete_record("contacts", self.parse_id(parts[2]), "Contacto eliminado")
         elif len(parts) == 3 and parts[:2] == ["api", "tasks"]:
             self.delete_record("tasks", self.parse_id(parts[2]), "Misión eliminada")
+        elif len(parts) == 3 and parts[:2] == ["api", "capture-sessions"]:
+            self.delete_record("capture_sessions", self.parse_id(parts[2]), "Sesión de captura eliminada")
         else:
             self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
 
@@ -839,6 +911,21 @@ class AppHandler(BaseHTTPRequestHandler):
                 self.export_data(db)
             elif parsed.path == "/api/dashboard":
                 self.send_json(dashboard_payload(db))
+            elif parsed.path.startswith("/api/captura/"):
+                token = parsed.path.rsplit("/", 1)[-1]
+                sesion = find_capture_session(db, token)
+                if not sesion:
+                    self.send_json({"error": "Este enlace no existe o fue dado de baja."}, HTTPStatus.NOT_FOUND)
+                elif not sesion["active"]:
+                    self.send_json({"error": "Este registro ya está cerrado. Pide el enlace vigente a quien te invitó."}, HTTPStatus.GONE)
+                else:
+                    self.send_json({"title": sesion["title"], "interests": CAPTURE_INTERESTS})
+            elif parsed.path == "/api/capture-sessions":
+                self.send_json(rows(db.execute(
+                    """SELECT s.*, (SELECT COUNT(*) FROM contacts c WHERE c.capture_session_id=s.id) registros
+                       FROM capture_sessions s ORDER BY s.active DESC, s.id DESC""")))
+            elif parsed.path.startswith("/api/capture-sessions/") and parsed.path.endswith("/qr.svg"):
+                self.send_capture_qr(db, parsed)
             elif parsed.path == "/api/compensation":
                 self.send_json({**compensation_snapshot(db), "ranks": RANKS})
             elif parsed.path == "/api/tasks":
@@ -1036,8 +1123,109 @@ class AppHandler(BaseHTTPRequestHandler):
             record = fetch_one(db, "SELECT * FROM development_items WHERE id=?", (item_id,))
         self.send_json(record)
 
+    def public_base_url(self) -> str:
+        host = self.headers.get("Host", f"127.0.0.1:{self.server.server_address[1]}")
+        # Render/Cloudflare terminan TLS antes de llegar aquí.
+        scheme = self.headers.get("X-Forwarded-Proto", "https" if USE_TURSO else "http")
+        return f"{scheme}://{host}"
+
+    def create_capture_session(self) -> None:
+        data = self.read_json()
+        titulo = clean_text(data.get("title"), 120, "El nombre de la sesión", required=True)
+        token = new_capture_token()
+        with connect() as db:
+            cursor = db.execute("INSERT INTO capture_sessions (title,token,active) VALUES (?,?,1)", (titulo, token))
+            sesion = fetch_one(db, "SELECT * FROM capture_sessions WHERE id=?", (cursor.lastrowid,))
+        self.send_json({**sesion, "registros": 0, "url": f"{self.public_base_url()}/captura/{token}"}, HTTPStatus.CREATED)
+
+    def update_capture_session(self, session_id: int | None) -> None:
+        if session_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        data = self.read_json()
+        updates = []
+        if "title" in data:
+            updates.append(("title", clean_text(data.get("title"), 120, "El nombre de la sesión", required=True)))
+        if "active" in data:
+            updates.append(("active", 1 if data.get("active") else 0))
+        if "regenerate" in data and data.get("regenerate"):
+            updates.append(("token", new_capture_token()))
+        if not updates:
+            self.send_json({"error": "No hay cambios válidos"}, HTTPStatus.BAD_REQUEST)
+            return
+        with connect() as db:
+            db.execute(f"UPDATE capture_sessions SET {','.join(f'{k}=?' for k, _ in updates)} WHERE id=?",
+                       [v for _, v in updates] + [session_id])
+            sesion = fetch_one(db, "SELECT * FROM capture_sessions WHERE id=?", (session_id,))
+        if not sesion:
+            self.send_json({"error": "No encontrada"}, HTTPStatus.NOT_FOUND)
+            return
+        self.send_json({**sesion, "url": f"{self.public_base_url()}/captura/{sesion['token']}"})
+
+    def send_capture_qr(self, db, parsed) -> None:
+        session_id = self.parse_id(parsed.path.split("/")[3])
+        sesion = fetch_one(db, "SELECT * FROM capture_sessions WHERE id=?", (session_id,)) if session_id else None
+        if not sesion:
+            self.send_json({"error": "No encontrada"}, HTTPStatus.NOT_FOUND)
+            return
+        try:
+            svg = capture_qr_svg(f"{self.public_base_url()}/captura/{sesion['token']}")
+        except ImportError:
+            self.send_json({"error": "Falta la librería segno para generar el código QR"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+        self.send_header("Content-Length", str(len(svg)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(svg)
+
+    def submit_capture(self, token: str) -> None:
+        """Registro que la propia persona llena desde el QR. Endpoint público."""
+        cliente = self.headers.get("X-Forwarded-For", self.client_address[0]).split(",")[0].strip()
+        if not capture_rate_ok(cliente):
+            self.send_json({"error": "Recibimos demasiados registros desde este dispositivo. Espera unos minutos."},
+                           HTTPStatus.TOO_MANY_REQUESTS)
+            return
+        data = self.read_json()
+        with connect() as db:
+            sesion = find_capture_session(db, token)
+            if not sesion:
+                self.send_json({"error": "Este enlace no existe o fue dado de baja."}, HTTPStatus.NOT_FOUND)
+                return
+            if not sesion["active"]:
+                self.send_json({"error": "Este registro ya está cerrado."}, HTTPStatus.GONE)
+                return
+            interes = clean_choice(data.get("interest"), set(CAPTURE_INTERESTS), "El interés", "Sin definir")
+            objetivo = {"Cliente": "Cliente", "Consultor": "Asociado", "Ambos": "Cliente / Asociado", "Sin definir": ""}[interes]
+            valores = {
+                "name": clean_text(data.get("name"), 120, "Tu nombre", required=True),
+                "kind": "Prospecto",
+                "interest": "Alto" if interes in ("Cliente", "Consultor", "Ambos") else "Medio",
+                "stage": "Nuevo",
+                "source": "Registro por QR",
+                "phone": clean_text(data.get("phone"), 40, "Tu teléfono"),
+                "email": clean_email(data.get("email"), "Tu correo"),
+                "health_profile": clean_text(data.get("health_profile"), 600, "Lo que quieres mejorar"),
+                "estimated_objective": objetivo,
+                "next_action": "Dar seguimiento al registro de la plática",
+                "next_action_date": day_offset(1),
+                "last_contact": today(),
+                "notes": clean_text(data.get("notes"), 600, "Tus comentarios"),
+                "capture_session_id": sesion["id"],
+            }
+            columnas = list(valores)
+            db.execute(
+                f"INSERT INTO contacts ({','.join(columnas)}) VALUES ({','.join('?' for _ in columnas)})",
+                [valores[c] for c in columnas],
+            )
+            db.execute("UPDATE users SET xp=xp+25 WHERE id=1")
+            evaluate_achievements(db)
+        self.send_json({"ok": True, "message": "¡Gracias! Tus datos quedaron registrados."}, HTTPStatus.CREATED)
+
     def export_data(self, db) -> None:
-        tables = ["users", "profile_scores", "contacts", "tasks", "daily_metrics", "goals", "achievements", "development_items"]
+        tables = ["users", "profile_scores", "contacts", "tasks", "daily_metrics", "goals", "achievements",
+                  "development_items", "capture_sessions"]
         payload = {"exported_at": datetime.now().isoformat(timespec="seconds"), "data": {}}
         for table in tables:
             payload["data"][table] = rows(db.execute(f"SELECT * FROM {table}"))
