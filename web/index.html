@@ -142,6 +142,7 @@
         <article class="panel contacts-panel">
           <div class="contact-toolbar">
             <label class="search-box"><span>⌕</span><input id="contactSearch" type="search" placeholder="Buscar por nombre, etapa o nota..."></label>
+            <label class="source-filter"><span class="sr-only">Filtrar por fuente</span><select id="sourceFilter"><option value="">Todas las fuentes</option></select></label>
             <div class="filter-tabs" role="tablist">
               <button class="active" data-kind="">Todos</button><button data-kind="Prospecto">Prospectos</button><button data-kind="Cliente">Clientes</button><button data-kind="Asociado">Asociados</button>
             </div>
@@ -487,7 +488,7 @@
         <label><span>Tipo</span><select name="kind"><option>Prospecto</option><option>Cliente</option><option>Asociado</option></select></label>
         <label><span>Interés</span><select name="interest"><option>Alto</option><option selected>Medio</option><option>Bajo</option></select></label>
         <label><span>Etapa</span><select name="stage"><option>Nuevo</option><option>Contactado</option><option>Presentación</option><option>Seguimiento</option><option>Cierre</option></select></label>
-        <label><span>Fuente</span><select name="source"><option>En persona</option><option>Referido</option><option>Facebook</option><option>Instagram</option><option>Evento</option><option>Café virtual</option></select></label>
+        <label><span>Fuente</span><select name="source"><option>En persona</option><option>Referido</option><option>Facebook</option><option>Instagram</option><option>WhatsApp</option><option>Evento</option><option>Café virtual</option><option>Registro por QR</option></select></label>
         <label><span>Teléfono</span><input name="phone" type="tel" maxlength="40" placeholder="656 000 0000"></label>
         <label><span>Correo</span><input name="email" type="email" maxlength="160" placeholder="nombre@correo.com"></label>
         <label><span>Próxima fecha</span><input name="next_action_date" type="date"></label>

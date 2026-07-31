@@ -937,17 +937,27 @@ class AppHandler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/contacts":
                 query = parse_qs(parsed.query)
                 kind = query.get("kind", [""])[0]
+                source = query.get("source", [""])[0]
                 search = query.get("q", [""])[0]
                 sql = "SELECT * FROM contacts WHERE 1=1"
                 values = []
                 if kind:
                     sql += " AND kind=?"
                     values.append(kind)
+                if source == "Sin fuente":
+                    sql += " AND COALESCE(TRIM(source),'')=''"
+                elif source:
+                    sql += " AND TRIM(COALESCE(source,''))=?"
+                    values.append(source)
                 if search:
                     sql += " AND (name LIKE ? OR notes LIKE ? OR stage LIKE ?)"
                     values.extend([f"%{search}%"] * 3)
                 sql += " ORDER BY CASE interest WHEN 'Alto' THEN 1 WHEN 'Medio' THEN 2 ELSE 3 END, COALESCE(next_action_date,'9999')"
                 self.send_json(rows(db.execute(sql, values)))
+            elif parsed.path == "/api/contact-sources":
+                self.send_json(rows(db.execute(
+                    """SELECT COALESCE(NULLIF(TRIM(source),''),'Sin fuente') source, COUNT(*) count
+                       FROM contacts GROUP BY 1 ORDER BY count DESC, source""")))
             elif parsed.path == "/api/metrics":
                 self.send_json(rows(db.execute("SELECT * FROM daily_metrics ORDER BY metric_date DESC LIMIT 14")))
             else:

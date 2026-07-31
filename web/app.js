@@ -1,4 +1,4 @@
-const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", search: "", editingContactId: null, editingTaskId: null, version: null, ranks: [], captureSession: null, captureSessions: [] };
+const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", activeSource: "", search: "", editingContactId: null, editingTaskId: null, version: null, ranks: [], captureSession: null, captureSessions: [] };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -663,14 +663,32 @@ function mobileContactCard(contact) {
   return `<article class="mobile-contact-card"><div class="person-top"><span class="person-avatar" style="color:${typeColors[contact.kind]};background:${typeColors[contact.kind]}16">${initials(contact.name)}</span><div><strong>${escapeHtml(contact.name)}</strong><span>${escapeHtml(contact.source)}</span></div></div><div class="mobile-contact-meta"><span class="type-pill type-${contact.kind}">${contact.kind}</span><span class="interest-pill interest-${contact.interest}">${contact.interest}</span><span class="stage-pill">${escapeHtml(contact.stage)}</span></div><p><strong>Siguiente:</strong> ${escapeHtml(contact.next_action || "Definir siguiente paso")} · ${shortDate(contact.next_action_date)}</p><div class="mobile-contact-actions"><button class="row-action" data-advance-contact="${contact.id}" title="Avanzar etapa">→</button><button class="row-action" data-edit-contact="${contact.id}" title="Editar">✎</button><button class="row-action danger" data-delete-contact="${contact.id}" title="Eliminar">🗑</button></div></article>`;
 }
 
+async function loadSourceFilter() {
+  try {
+    const fuentes = await api("/api/contact-sources");
+    const select = $("#sourceFilter");
+    const total = fuentes.reduce((suma, item) => suma + item.count, 0);
+    select.innerHTML = `<option value="">Todas las fuentes (${total})</option>` +
+      fuentes.map((item) => `<option value="${escapeHtml(item.source)}">${escapeHtml(item.source)} (${item.count})</option>`).join("");
+    select.value = state.activeSource;
+    // Si la fuente elegida se quedó sin contactos, volver a "todas".
+    if (select.value !== state.activeSource) { state.activeSource = ""; select.value = ""; }
+  } catch { /* El filtro es una ayuda, no debe romper la vista. */ }
+}
+
 async function loadContacts() {
   const params = new URLSearchParams();
   if (state.activeKind) params.set("kind", state.activeKind);
+  if (state.activeSource) params.set("source", state.activeSource);
   if (state.search) params.set("q", state.search);
   setBusy("#contactRows", true);
   try {
     state.contacts = await api(`/api/contacts?${params}`);
-    $("#contactRows").innerHTML = state.contacts.length ? state.contacts.map(contactRow).join("") : `<tr><td colspan="7">No encontramos personas con esos filtros.</td></tr>`;
+    await loadSourceFilter();
+    const vacio = state.activeSource
+      ? `No hay personas de la fuente “${escapeHtml(state.activeSource)}” con esos filtros.`
+      : "No encontramos personas con esos filtros.";
+    $("#contactRows").innerHTML = state.contacts.length ? state.contacts.map(contactRow).join("") : `<tr><td colspan="7">${vacio}</td></tr>`;
     $("#mobileContactList").innerHTML = state.contacts.length ? state.contacts.map(mobileContactCard).join("") : `<p class="empty-state">No encontramos personas con esos filtros.</p>`;
     $$('[data-advance-contact]').forEach((button) => button.addEventListener("click", advanceContact));
     $$('[data-edit-contact]').forEach((button) => button.addEventListener("click", () => openContactDialog(Number(button.dataset.editContact))));
@@ -841,6 +859,13 @@ function openContactDialog(contactId = null) {
   $("#contactModalTitle").textContent = contact ? `Editar a ${contact.name}` : "Agregar a mi red";
   $("#contactSubmitButton").textContent = contact ? "Guardar cambios" : "Guardar contacto +25 XP";
   if (contact) {
+    // Si la fuente guardada no está entre las opciones, agregarla: de lo contrario
+    // el desplegable se ve vacío y al guardar se perdería el dato.
+    const fuente = (contact.source || "").trim();
+    const select = form.elements.source;
+    if (fuente && ![...select.options].some((option) => option.value === fuente)) {
+      select.add(new Option(fuente, fuente));
+    }
     ["name", "kind", "interest", "stage", "source", "phone", "email", "next_action_date", "birthday", "monthly_consumption", "volume_points", "health_profile", "next_action", "notes"].forEach((key) => {
       if (form.elements[key]) form.elements[key].value = contact[key] ?? "";
     });
@@ -1007,6 +1032,10 @@ function bindEvents() {
     $$(".filter-tabs button").forEach((item) => item.classList.toggle("active", item === button));
     loadContacts();
   }));
+  $("#sourceFilter").addEventListener("change", (event) => {
+    state.activeSource = event.target.value;
+    loadContacts();
+  });
   let searchTimer;
   $("#contactSearch").addEventListener("input", (event) => {
     clearTimeout(searchTimer);
