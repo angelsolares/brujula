@@ -28,7 +28,9 @@ const profileMeta = {
 const categoryIcons = { Llamada: "☎", Contenido: "▶", Mentoría: "♢", Redes: "◎", Capacitación: "⌕", Organización: "✓" };
 const typeColors = { Prospecto: "#7755c7", Cliente: "#ed5f86", Asociado: "#2878d0" };
 const visualVariants = {
-  female: { hero: "/assets/mission-trail.png", profile: "/assets/profile-result.png", label: "avatar femenino" },
+  // La versión femenina se recorta para quitar el recuadro con barras de ejemplo;
+  // el original con ese recuadro sigue en profile-result.png.
+  female: { hero: "/assets/mission-trail.png", profile: "/assets/profile-result-female.png", label: "avatar femenino" },
   male: { hero: "/assets/mission-trail-male.png", profile: "/assets/profile-result-male.png", label: "avatar masculino" },
   neutral: { hero: "/assets/mission-trail-neutral.png", profile: "/assets/profile-result-neutral.png", label: "ilustración neutral sin avatar" },
 };
