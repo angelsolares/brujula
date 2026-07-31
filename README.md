@@ -63,6 +63,29 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 - Rutas de capacitación y desarrollo personal.
 - Guía interactiva con recorrido guiado, simulador de niveles, reglas de XP, manual del CRM, perfiles, plan de primera semana y preguntas frecuentes.
 
+## Cuentas y acceso
+
+Cada persona entra con su correo y su contraseña, y **ve únicamente su propia red**:
+sus contactos, misiones, métricas, metas y logros están separados por usuario.
+
+```bash
+python server.py --add-account correo@ejemplo.com "Nombre Completo" --gender female --role admin
+python server.py --list-accounts
+```
+
+`--add-account` genera una contraseña aleatoria y la muestra **una sola vez**: en la base
+solo queda su hash (PBKDF2-SHA256, 260 000 iteraciones). Nunca se guardan contraseñas en
+el repositorio. Quien entra con una contraseña temporal recibe el aviso para cambiarla.
+
+Detalles de la protección:
+
+- Sesión en cookie `HttpOnly` con `SameSite=Lax`, y `Secure` cuando se sirve por HTTPS.
+- Toda la API exige sesión; los intentos de leer o modificar datos ajenos responden 404.
+- Máximo de intentos de inicio de sesión por IP para frenar el probado de contraseñas.
+- Al cambiar la contraseña se cierran las demás sesiones abiertas.
+- Siguen siendo públicos, a propósito: la pantalla de acceso, `/api/health` y el
+  formulario del QR (`/captura/<token>`), que es lo que permite el registro en grupo.
+
 ## Captura por QR
 
 Para registrar a varias personas a la vez en una plática. Desde **Mi red → Captura por QR**

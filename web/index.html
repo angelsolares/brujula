@@ -58,11 +58,17 @@
         <div class="streak-row"><span class="streak-flame">🔥</span><strong id="sideStreak">0 días</strong></div>
         <p>Un pequeño paso diario mantiene tu rumbo.</p>
       </div>
-      <button class="profile-mini" id="openAccountProfile" type="button" aria-label="Abrir y editar mi perfil">
-        <div class="avatar">MT</div>
-        <div><strong id="sideUserName">Exploradora</strong><span id="sideUserLevel">Nivel 1</span></div>
-        <span class="profile-chevron">›</span>
-      </button>
+      <div class="account-box">
+        <button class="profile-mini" id="openAccountProfile" type="button" aria-label="Abrir y editar mi perfil">
+          <div class="avatar">MT</div>
+          <div><strong id="sideUserName">Exploradora</strong><span id="sideUserLevel">Nivel 1</span></div>
+          <span class="profile-chevron">›</span>
+        </button>
+        <div class="account-row">
+          <span id="accountEmail" title="Sesión activa"></span>
+          <button type="button" id="logoutButton" title="Cerrar sesión">Salir</button>
+        </div>
+      </div>
     </aside>
 
     <main class="main-content">
@@ -467,6 +473,18 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="waking-notice" id="wakingNotice" role="status" aria-live="polite"><span class="spinner"></span> Despertando el servidor, esto puede tardar unos segundos…</div>
   <div class="update-banner" id="updateBanner" role="status"><span>Hay una versión nueva de BRÚJULA disponible.</span><button type="button" id="reloadApp">Actualizar ahora</button></div>
+
+  <dialog id="passwordDialog" class="modal">
+    <form id="passwordForm" method="dialog" novalidate>
+      <div class="modal-head"><div><span class="mini-kicker">SEGURIDAD</span><h2>Cambiar mi contraseña</h2><p id="passwordHint">Elige una contraseña que solo tú conozcas, de al menos 10 caracteres.</p></div><button type="button" data-close-password aria-label="Cerrar">×</button></div>
+      <div class="form-grid">
+        <label class="span-2"><span>Contraseña actual *</span><input name="current_password" type="password" autocomplete="current-password" required></label>
+        <label class="span-2"><span>Contraseña nueva *</span><input name="new_password" type="password" autocomplete="new-password" minlength="10" required><small>Mínimo 10 caracteres.</small></label>
+        <label class="span-2"><span>Repite la contraseña nueva *</span><input name="repeat_password" type="password" autocomplete="new-password" required></label>
+      </div>
+      <div class="modal-actions"><button type="button" class="secondary-button" data-close-password>Ahora no</button><button type="submit" class="primary-button" id="passwordSubmit">Guardar contraseña</button></div>
+    </form>
+  </dialog>
 
   <dialog id="confirmDialog" class="modal confirm-modal">
     <div class="confirm-shell">

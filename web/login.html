@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17234a">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Entrar a BRÚJULA</title>
+  <style>
+    *,*::before,*::after { box-sizing: border-box; }
+    :root { --navy:#17234a; --purple:#7755c7; --pink:#ed5f86; --muted:#6b7488; --line:#e4e7f0; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px;
+           font-family:"Segoe UI",system-ui,-apple-system,sans-serif; color:var(--navy);
+           background:linear-gradient(165deg,#1a224d,#57419f); -webkit-font-smoothing:antialiased; }
+    .card { width:min(420px,100%); background:#fff; border-radius:22px; padding:34px 30px;
+            box-shadow:0 24px 55px rgba(12,17,40,.32); }
+    .mark { width:56px; height:56px; display:grid; place-items:center; margin-bottom:18px;
+            border-radius:18px; background:#f2edff; color:var(--purple); font-size:27px; }
+    h1 { margin:0 0 7px; font-size:24px; letter-spacing:-.03em; }
+    .lead { margin:0 0 24px; color:var(--muted); font-size:12px; line-height:1.6; }
+    label { display:block; margin-bottom:15px; }
+    label > span { display:block; margin-bottom:6px; font-size:12px; font-weight:700; }
+    input { width:100%; padding:13px 14px; border:1px solid var(--line); border-radius:12px;
+            font:inherit; font-size:16px; background:#fbfcfe; color:var(--navy); }
+    input:focus { outline:none; border-color:var(--purple); background:#fff; }
+    .pass-wrap { position:relative; }
+    .pass-wrap input { padding-right:64px; }
+    .pass-toggle { position:absolute; right:8px; top:50%; transform:translateY(-50%); border:0;
+                   border-radius:9px; padding:7px 10px; background:#f1f2f6; color:var(--purple);
+                   font-size:10px; font-weight:800; cursor:pointer; }
+    button.primary { width:100%; min-height:52px; margin-top:6px; border:0; border-radius:14px; color:#fff;
+                     font-size:15px; font-weight:800; cursor:pointer;
+                     background:linear-gradient(120deg,#7755c7,#ed5f86); }
+    button.primary:disabled { opacity:.65; cursor:progress; }
+    .error { margin-top:14px; padding:12px 15px; border-radius:11px; background:#fff0f4;
+             color:#b32a54; font-size:11px; font-weight:700; line-height:1.5; }
+    .note { margin-top:20px; padding-top:18px; border-top:1px solid var(--line);
+            color:var(--muted); font-size:10px; line-height:1.6; }
+    @media (prefers-reduced-motion: reduce) { * { transition:none!important; } }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="mark">✦</div>
+    <h1>Entra a BRÚJULA</h1>
+    <p class="lead">Tu centro de desarrollo personal. Cada quien ve únicamente su propia red y sus propios avances.</p>
+
+    <form id="loginForm" novalidate>
+      <label>
+        <span>Correo</span>
+        <input name="email" type="email" inputmode="email" autocomplete="username" placeholder="nombre@correo.com" required>
+      </label>
+      <label>
+        <span>Contraseña</span>
+        <div class="pass-wrap">
+          <input name="password" type="password" autocomplete="current-password" placeholder="Tu contraseña" required>
+          <button type="button" class="pass-toggle" id="togglePass" aria-label="Mostrar u ocultar la contraseña">VER</button>
+        </div>
+      </label>
+      <button type="submit" class="primary" id="submitButton">Entrar</button>
+      <div id="formError"></div>
+    </form>
+
+    <p class="note">Si es tu primera vez, usa la contraseña temporal que te compartieron y cámbiala desde tu perfil en cuanto entres.</p>
+  </main>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+
+    $("#togglePass").addEventListener("click", () => {
+      const campo = $('[name="password"]');
+      const oculto = campo.type === "password";
+      campo.type = oculto ? "text" : "password";
+      $("#togglePass").textContent = oculto ? "OCULTAR" : "VER";
+      campo.focus();
+    });
+
+    $("#loginForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      $("#formError").innerHTML = "";
+      const datos = Object.fromEntries(new FormData(event.currentTarget));
+      if (!datos.email.trim() || !datos.password) {
+        $("#formError").innerHTML = '<div class="error">Escribe tu correo y tu contraseña.</div>';
+        return;
+      }
+      const boton = $("#submitButton");
+      boton.disabled = true;
+      boton.textContent = "Entrando…";
+      try {
+        const respuesta = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: datos.email.trim(), password: datos.password }),
+        });
+        const resultado = await respuesta.json();
+        if (!respuesta.ok) throw new Error(resultado.error || "No pudimos entrar.");
+        location.href = "/";
+      } catch (error) {
+        boton.disabled = false;
+        boton.textContent = "Entrar";
+        $("#formError").innerHTML = `<div class="error">${error.message}</div>`;
+        $('[name="password"]').value = "";
+      }
+    });
+  </script>
+</body>
+</html>

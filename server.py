@@ -28,6 +28,41 @@ PUBLIC_DIR = ROOT / "public"
 
 MAX_BODY_BYTES = 1_000_000
 
+# --- Autenticación --------------------------------------------------------
+SESSION_COOKIE = "brujula_sesion"
+SESSION_DAYS = 30
+PBKDF2_ROUNDS = 260_000
+LOGIN_RATE_LIMIT = 10
+LOGIN_RATE_WINDOW = 600
+VALID_ROLES = {"admin", "consultor"}
+
+# Rutas que funcionan sin haber iniciado sesión.
+PUBLIC_PATHS = {"/login", "/login.html", "/api/auth/login", "/api/health"}
+PUBLIC_PREFIXES = ("/captura/", "/api/captura/", "/assets/", "/styles.css", "/favicon")
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ROUNDS)
+    return f"pbkdf2_sha256${PBKDF2_ROUNDS}${salt.hex()}${digest.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        algoritmo, rondas, salt_hex, hash_hex = (stored or "").split("$")
+        if algoritmo != "pbkdf2_sha256":
+            return False
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), int(rondas))
+        return secrets.compare_digest(digest.hex(), hash_hex)
+    except (ValueError, AttributeError):
+        return False
+
+
+def generate_password() -> str:
+    """Clave legible de dictar por teléfono, pero con suficiente entropía."""
+    alfabeto = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "-".join("".join(secrets.choice(alfabeto) for _ in range(5)) for _ in range(3))
+
 
 APP_VERSION = "dev"
 
@@ -204,6 +239,26 @@ def next_tier(value: int, tiers: list[dict], field: str) -> dict | None:
 
 SCHEMA_STATEMENTS = [
     """
+CREATE TABLE IF NOT EXISTS accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'admin',
+  active INTEGER NOT NULL DEFAULT 1,
+  must_change_password INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_login TEXT
+)""",
+    """
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  account_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+)""",
+    """
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -251,6 +306,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   birthday TEXT,
   notes TEXT DEFAULT '',
   capture_session_id INTEGER,
+  user_id INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )""",
     """
@@ -265,12 +321,14 @@ CREATE TABLE IF NOT EXISTS tasks (
   due_time TEXT,
   completed INTEGER NOT NULL DEFAULT 0,
   contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+  user_id INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )""",
     """
 CREATE TABLE IF NOT EXISTS daily_metrics (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  metric_date TEXT NOT NULL UNIQUE,
+  user_id INTEGER NOT NULL DEFAULT 1,
+  metric_date TEXT NOT NULL,
   new_prospects INTEGER NOT NULL DEFAULT 0,
   presentations INTEGER NOT NULL DEFAULT 0,
   new_clients INTEGER NOT NULL DEFAULT 0,
@@ -278,7 +336,8 @@ CREATE TABLE IF NOT EXISTS daily_metrics (
   sales REAL NOT NULL DEFAULT 0,
   volume_points REAL NOT NULL DEFAULT 0,
   client_orders INTEGER NOT NULL DEFAULT 0,
-  products_sold TEXT DEFAULT ''
+  products_sold TEXT DEFAULT '',
+  UNIQUE(user_id, metric_date)
 )""",
     """
 CREATE TABLE IF NOT EXISTS goals (
@@ -288,22 +347,26 @@ CREATE TABLE IF NOT EXISTS goals (
   target REAL NOT NULL,
   unit TEXT NOT NULL,
   color TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'En curso'
+  status TEXT NOT NULL DEFAULT 'En curso',
+  user_id INTEGER NOT NULL DEFAULT 1
 )""",
     """
 CREATE TABLE IF NOT EXISTS achievements (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  slug TEXT NOT NULL UNIQUE,
+  user_id INTEGER NOT NULL DEFAULT 1,
+  slug TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT NOT NULL,
   icon TEXT NOT NULL,
-  unlocked_at TEXT
+  unlocked_at TEXT,
+  UNIQUE(user_id, slug)
 )""",
     """
 CREATE TABLE IF NOT EXISTS capture_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
   token TEXT NOT NULL UNIQUE,
+  user_id INTEGER NOT NULL DEFAULT 1,
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )""",
@@ -314,7 +377,8 @@ CREATE TABLE IF NOT EXISTS development_items (
   kind TEXT NOT NULL,
   progress INTEGER NOT NULL DEFAULT 0,
   profile_tag TEXT NOT NULL,
-  points INTEGER NOT NULL DEFAULT 0
+  points INTEGER NOT NULL DEFAULT 0,
+  user_id INTEGER NOT NULL DEFAULT 1
 )""",
 ]
 
@@ -358,16 +422,16 @@ ACHIEVEMENT_CATALOG = [
 ]
 
 
-def sync_achievement_catalog(db) -> None:
+def sync_achievement_catalog(db, user_id: int) -> None:
     """Agrega logros nuevos y actualiza sus textos sin tocar los ya desbloqueados."""
     for slug, title, description, icon in ACHIEVEMENT_CATALOG:
         db.execute(
-            "INSERT OR IGNORE INTO achievements (slug,title,description,icon,unlocked_at) VALUES (?,?,?,?,NULL)",
-            (slug, title, description, icon),
+            "INSERT OR IGNORE INTO achievements (user_id,slug,title,description,icon,unlocked_at) VALUES (?,?,?,?,?,NULL)",
+            (user_id, slug, title, description, icon),
         )
         db.execute(
-            "UPDATE achievements SET title=?, description=?, icon=? WHERE slug=?",
-            (title, description, icon, slug),
+            "UPDATE achievements SET title=?, description=?, icon=? WHERE user_id=? AND slug=?",
+            (title, description, icon, user_id, slug),
         )
 
 
@@ -378,6 +442,138 @@ def ensure_column(db, table: str, column: str, definition: str) -> None:
             db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
     except Exception:
         pass
+
+
+def create_session(db, account_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    ahora = datetime.now()
+    db.execute(
+        "INSERT INTO sessions (token,account_id,created_at,expires_at) VALUES (?,?,?,?)",
+        (token, account_id, ahora.isoformat(timespec="seconds"),
+         (ahora + timedelta(days=SESSION_DAYS)).isoformat(timespec="seconds")),
+    )
+    return token
+
+
+def session_account(db, token: str | None) -> dict | None:
+    if not token:
+        return None
+    cuenta = fetch_one(db, """SELECT a.id, a.user_id, a.name, a.email, a.role, a.must_change_password, s.expires_at
+                              FROM sessions s JOIN accounts a ON a.id = s.account_id
+                              WHERE s.token = ? AND a.active = 1""", (token,))
+    if not cuenta:
+        return None
+    if cuenta["expires_at"] < datetime.now().isoformat(timespec="seconds"):
+        db.execute("DELETE FROM sessions WHERE token=?", (token,))
+        return None
+    return cuenta
+
+
+def table_columns(db, table: str) -> set:
+    try:
+        return {row[1] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
+    except Exception:
+        return set()
+
+
+def rebuild_for_multiuser(db, table: str, columns: str, unique: str) -> None:
+    """Reconstruye una tabla cuya restricción UNIQUE bloquearía a varios usuarios.
+
+    SQLite no permite quitar un UNIQUE de columna sin recrear la tabla, así que
+    se copia el contenido existente asignándolo al usuario 1.
+    """
+    if "user_id" in table_columns(db, table):
+        return
+    campos = [c.strip().split()[0] for c in columns.split("\n") if c.strip() and not c.strip().startswith("UNIQUE")]
+    heredables = [c for c in campos if c != "user_id" and c in table_columns(db, table)]
+    db.execute(f"ALTER TABLE {table} RENAME TO {table}_legacy")
+    db.execute(f"CREATE TABLE {table} (\n{columns},\n  {unique}\n)")
+    db.execute(f"INSERT INTO {table} (user_id,{','.join(heredables)}) SELECT 1,{','.join(heredables)} FROM {table}_legacy")
+    db.execute(f"DROP TABLE {table}_legacy")
+    print(f"  tabla {table} reconstruida para varios usuarios")
+
+
+def migrate_multiuser(db) -> None:
+    for tabla in ("contacts", "tasks", "goals", "development_items", "capture_sessions"):
+        ensure_column(db, tabla, "user_id", "INTEGER NOT NULL DEFAULT 1")
+    rebuild_for_multiuser(db, "daily_metrics", """  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL DEFAULT 1,
+  metric_date TEXT NOT NULL,
+  new_prospects INTEGER NOT NULL DEFAULT 0,
+  presentations INTEGER NOT NULL DEFAULT 0,
+  new_clients INTEGER NOT NULL DEFAULT 0,
+  new_associates INTEGER NOT NULL DEFAULT 0,
+  sales REAL NOT NULL DEFAULT 0,
+  volume_points REAL NOT NULL DEFAULT 0,
+  client_orders INTEGER NOT NULL DEFAULT 0,
+  products_sold TEXT DEFAULT ''""", "UNIQUE(user_id, metric_date)")
+    rebuild_for_multiuser(db, "achievements", """  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL DEFAULT 1,
+  slug TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  icon TEXT NOT NULL,
+  unlocked_at TEXT""", "UNIQUE(user_id, slug)")
+
+
+def seed_user_catalogs(db, user_id: int) -> None:
+    """Contenido base que cada usuario necesita para que la app no salga vacía."""
+    if not db.execute("SELECT COUNT(*) FROM profile_scores WHERE user_id=?", (user_id,)).fetchone()[0]:
+        db.executemany(
+            "INSERT INTO profile_scores (user_id,profile_key,label,score,color) VALUES (?,?,?,?,?)",
+            [(user_id, *fila) for fila in [
+                ("leadership", "Liderazgo", 25, "#2878d0"),
+                ("connection", "Conexión", 25, "#7755c7"),
+                ("constancy", "Constancia", 25, "#55a85b"),
+                ("analyst", "Analista", 25, "#ef5f86"),
+                ("executor", "Ejecutor", 25, "#f49a2f"),
+            ]],
+        )
+    if not db.execute("SELECT COUNT(*) FROM goals WHERE user_id=?", (user_id,)).fetchone()[0]:
+        db.executemany(
+            "INSERT INTO goals (user_id,title,current,target,unit,color) VALUES (?,?,?,?,?,?)",
+            [(user_id, *fila) for fila in [
+                ("Lista de prospectos", 0, 100, "personas", "#7755c7"),
+                ("Contactos esta semana", 0, 25, "contactos", "#ef5f86"),
+                ("Ventas del mes", 0, 35000, "MXN", "#f2a93b"),
+                ("Sesiones de conocimiento", 0, 4, "sesiones", "#2878d0"),
+            ]],
+        )
+    if not db.execute("SELECT COUNT(*) FROM development_items WHERE user_id=?", (user_id,)).fetchone()[0]:
+        db.executemany(
+            "INSERT INTO development_items (user_id,title,kind,progress,profile_tag,points) VALUES (?,?,?,?,?,?)",
+            [(user_id, *fila) for fila in [
+                ("Fundamentos científicos del producto", "Curso", 0, "Analista", 120),
+                ("Conversaciones que conectan", "Práctica", 0, "Conexión", 90),
+                ("Formación de líderes", "Ruta", 0, "Liderazgo", 180),
+                ("Sistema de seguimiento semanal", "Hábito", 0, "Constancia", 110),
+            ]],
+        )
+    sync_achievement_catalog(db, user_id)
+
+
+def create_account(email: str, name: str, gender: str = "neutral", role: str = "admin", password: str | None = None) -> dict:
+    """Crea una cuenta con su propio CRM. Devuelve la clave generada una sola vez."""
+    email = clean_email(email, "El correo").lower()
+    name = clean_text(name, 120, "El nombre", required=True)
+    role = clean_choice(role, VALID_ROLES, "El rol", "admin")
+    gender = clean_choice(gender, VALID_GENDERS, "El género", "neutral")
+    password = password or generate_password()
+    with connect() as db:
+        if fetch_one(db, "SELECT id FROM accounts WHERE email=?", (email,)):
+            raise ValueError(f"Ya existe una cuenta con el correo {email}")
+        cursor = db.execute(
+            """INSERT INTO users (name,gender,email,purpose,dominant_profile,xp,streak,target_income,rank)
+               VALUES (?,?,?,'','Liderazgo',0,0,35000,'Empresario')""",
+            (name, gender, email),
+        )
+        user_id = cursor.lastrowid
+        db.execute(
+            "INSERT INTO accounts (user_id,name,email,password_hash,role) VALUES (?,?,?,?,?)",
+            (user_id, name, email, hash_password(password), role),
+        )
+        seed_user_catalogs(db, user_id)
+    return {"email": email, "name": name, "role": role, "user_id": user_id, "password": password}
 
 
 def initialize_database() -> None:
@@ -395,7 +591,10 @@ def initialize_database() -> None:
         ensure_column(db, "daily_metrics", "client_orders", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(db, "contacts", "volume_points", "REAL NOT NULL DEFAULT 0")
         ensure_column(db, "contacts", "capture_session_id", "INTEGER")
-        sync_achievement_catalog(db)
+        migrate_multiuser(db)
+        db.execute("DELETE FROM sessions WHERE expires_at < ?", (datetime.now().isoformat(timespec="seconds"),))
+        for existente in rows(db.execute("SELECT id FROM users")):
+            sync_achievement_catalog(db, existente["id"])
         if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
             return
 
@@ -423,8 +622,8 @@ def initialize_database() -> None:
         )
         db.executemany(
             """INSERT INTO contacts
-            (name,kind,interest,stage,source,phone,health_profile,estimated_objective,products,monthly_consumption,next_action,next_action_date,last_contact,birthday,notes)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (user_id,name,kind,interest,stage,source,phone,health_profile,estimated_objective,products,monthly_consumption,next_action,next_action_date,last_contact,birthday,notes)
+            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             [
                 ("Ana Robles", "Prospecto", "Alto", "Presentación", "Café virtual", "656 555 0148", "Problemas de circulación; busca más energía", "Cliente / Asociada", "", 0, "Contarle una historia de éxito e invitarla a café", day_offset(0), day_offset(-2), "1988-08-12", "No llamar durante el horario laboral."),
                 ("Pedro Sosa", "Prospecto", "Medio", "Contactado", "Referido", "656 555 0192", "Interés en rendimiento físico", "Cliente", "", 0, "Enviar video de testimonio", day_offset(0), day_offset(-4), None, "Prefiere mensajes de WhatsApp."),
@@ -436,7 +635,7 @@ def initialize_database() -> None:
             ],
         )
         db.executemany(
-            "INSERT INTO tasks (title,detail,category,profile_tag,points,due_date,due_time,completed,contact_id) VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO tasks (user_id,title,detail,category,profile_tag,points,due_date,due_time,completed,contact_id) VALUES (1,?,?,?,?,?,?,?,?,?)",
             [
                 ("Llamar a Ana Robles", "Invitarla a un café y compartir historia de éxito", "Llamada", "Conexión", 30, today(),"09:30", 0, 1),
                 ("Enviar testimonio a Pedro", "Video corto de resultado de cliente", "Contenido", "Conexión", 20, today(),"11:00", 1, 2),
@@ -447,7 +646,7 @@ def initialize_database() -> None:
             ],
         )
         db.executemany(
-            "INSERT INTO daily_metrics (metric_date,new_prospects,presentations,new_clients,new_associates,sales,volume_points,client_orders,products_sold) VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO daily_metrics (user_id,metric_date,new_prospects,presentations,new_clients,new_associates,sales,volume_points,client_orders,products_sold) VALUES (1,?,?,?,?,?,?,?,?,?)",
             [
                 (day_offset(-4), 3, 2, 1, 0, 4200, 600, 1, "Platinum x1, Sport x1"),
                 (day_offset(-3), 2, 1, 0, 1, 3100, 440, 1, "Classic x1"),
@@ -457,7 +656,7 @@ def initialize_database() -> None:
             ],
         )
         db.executemany(
-            "INSERT INTO goals (title,current,target,unit,color) VALUES (?,?,?,?,?)",
+            "INSERT INTO goals (user_id,title,current,target,unit,color) VALUES (1,?,?,?,?,?)",
             [
                 ("Lista de prospectos", 68, 100, "personas", "#7755c7"),
                 ("Contactos esta semana", 17, 25, "contactos", "#ef5f86"),
@@ -466,7 +665,7 @@ def initialize_database() -> None:
             ],
         )
         db.executemany(
-            "INSERT INTO development_items (title,kind,progress,profile_tag,points) VALUES (?,?,?,?,?)",
+            "INSERT INTO development_items (user_id,title,kind,progress,profile_tag,points) VALUES (1,?,?,?,?,?)",
             [
                 ("Fundamentos científicos del producto", "Curso", 72, "Analista", 120),
                 ("Conversaciones que conectan", "Práctica", 45, "Conexión", 90),
@@ -476,9 +675,9 @@ def initialize_database() -> None:
         )
 
 
-def compute_streak(db) -> int:
+def compute_streak(db, user_id: int) -> int:
     """Días consecutivos con registro diario, contando hacia atrás desde hoy."""
-    recorded = {row["metric_date"] for row in rows(db.execute("SELECT metric_date FROM daily_metrics ORDER BY metric_date DESC LIMIT 400"))}
+    recorded = {row["metric_date"] for row in rows(db.execute("SELECT metric_date FROM daily_metrics WHERE user_id=? ORDER BY metric_date DESC LIMIT 400", (user_id,)))}
     if not recorded:
         return 0
     cursor = date.today()
@@ -492,20 +691,20 @@ def compute_streak(db) -> int:
     return streak
 
 
-def achievement_stats(db) -> dict:
-    user = fetch_one(db, "SELECT xp, purpose FROM users WHERE id=1") or {}
-    counts = {item["kind"]: item["count"] for item in rows(db.execute("SELECT kind,COUNT(*) count FROM contacts GROUP BY kind"))}
+def achievement_stats(db, user_id: int) -> dict:
+    user = fetch_one(db, "SELECT xp, purpose FROM users WHERE id=?", (user_id,)) or {}
+    counts = {item["kind"]: item["count"] for item in rows(db.execute("SELECT kind,COUNT(*) count FROM contacts WHERE user_id=? GROUP BY kind", (user_id,)))}
     return {
         "xp": user.get("xp", 0),
         "has_purpose": bool((user.get("purpose") or "").strip()),
         "contacts": sum(counts.values()),
         "associates": counts.get("Asociado", 0),
-        "goals": db.execute("SELECT COUNT(*) FROM goals").fetchone()[0],
-        "streak": compute_streak(db),
-        "sales": db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics").fetchone()[0],
-        "month_vvp": db.execute("SELECT COALESCE(SUM(volume_points),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0],
-        "month_orders": db.execute("SELECT COALESCE(SUM(client_orders),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0],
-        "month_consultants": db.execute("SELECT COALESCE(SUM(new_associates),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0],
+        "goals": db.execute("SELECT COUNT(*) FROM goals WHERE user_id=?", (user_id,)).fetchone()[0],
+        "streak": compute_streak(db, user_id),
+        "sales": db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE user_id=?", (user_id,)).fetchone()[0],
+        "month_vvp": db.execute("SELECT COALESCE(SUM(volume_points),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0],
+        "month_orders": db.execute("SELECT COALESCE(SUM(client_orders),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0],
+        "month_consultants": db.execute("SELECT COALESCE(SUM(new_associates),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0],
     }
 
 
@@ -523,30 +722,30 @@ ACHIEVEMENT_RULES = {
 }
 
 
-def evaluate_achievements(db) -> list[dict]:
+def evaluate_achievements(db, user_id: int) -> list[dict]:
     """Desbloquea los logros cuya condición ya se cumple. Devuelve los nuevos."""
-    locked = rows(db.execute("SELECT slug,title,icon FROM achievements WHERE unlocked_at IS NULL"))
+    locked = rows(db.execute("SELECT slug,title,icon FROM achievements WHERE user_id=? AND unlocked_at IS NULL", (user_id,)))
     if not locked:
         return []
-    stats = achievement_stats(db)
+    stats = achievement_stats(db, user_id)
     unlocked = []
     for achievement in locked:
         rule = ACHIEVEMENT_RULES.get(achievement["slug"])
         if rule and rule(stats):
-            db.execute("UPDATE achievements SET unlocked_at=? WHERE slug=?", (today(), achievement["slug"]))
+            db.execute("UPDATE achievements SET unlocked_at=? WHERE user_id=? AND slug=?", (today(), user_id, achievement["slug"]))
             unlocked.append(achievement)
     return unlocked
 
 
-def sync_progress(db) -> list[dict]:
+def sync_progress(db, user_id: int) -> list[dict]:
     """Recalcula racha y meta de ventas, y evalúa logros. Devuelve logros nuevos."""
-    db.execute("UPDATE users SET streak=? WHERE id=1", (compute_streak(db),))
-    month_sales = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0]
-    db.execute("UPDATE goals SET current=? WHERE unit='MXN'", (month_sales,))
-    return evaluate_achievements(db)
+    db.execute("UPDATE users SET streak=? WHERE id=?", (compute_streak(db, user_id), user_id))
+    month_sales = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0]
+    db.execute("UPDATE goals SET current=? WHERE user_id=? AND unit='MXN'", (month_sales, user_id))
+    return evaluate_achievements(db, user_id)
 
 
-def compensation_snapshot(db) -> dict:
+def compensation_snapshot(db, user_id: int) -> dict:
     """Traduce lo registrado este mes a los términos del plan de compensación."""
     mes = f"{today()[:7]}-%"
     totales = fetch_one(db, """SELECT
@@ -555,14 +754,14 @@ def compensation_snapshot(db) -> dict:
         COALESCE(SUM(new_associates),0) consultores,
         COALESCE(SUM(new_clients),0) clientes,
         COALESCE(SUM(sales),0) ventas
-        FROM daily_metrics WHERE metric_date LIKE ?""", (mes,)) or {}
+        FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?""", (user_id, mes)) or {}
 
     vvp = float(totales.get("vvp") or 0)
     pedidos = int(totales.get("pedidos") or 0)
     consultores = int(totales.get("consultores") or 0)
     restantes = days_left_in_month()
 
-    usuario = fetch_one(db, "SELECT rank FROM users WHERE id=1") or {}
+    usuario = fetch_one(db, "SELECT rank FROM users WHERE id=?", (user_id,)) or {}
     indice = rank_index(usuario.get("rank") or "Empresario")
     actual = RANKS[indice]
     siguiente = RANKS[indice + 1] if indice + 1 < len(RANKS) else None
@@ -577,7 +776,7 @@ def compensation_snapshot(db) -> dict:
 
     # Clientes cuyo consumo registrado ya califica para el bono.
     clientes_calificados = db.execute(
-        "SELECT COUNT(*) FROM contacts WHERE kind='Cliente' AND volume_points >= ?", (QUALIFYING_ORDER_VP,)
+        "SELECT COUNT(*) FROM contacts WHERE user_id=? AND kind='Cliente' AND volume_points >= ?", (user_id, QUALIFYING_ORDER_VP)
     ).fetchone()[0]
 
     return {
@@ -698,6 +897,22 @@ _capture_hits: dict[str, list[float]] = {}
 _capture_lock = threading.Lock()
 
 
+_login_hits: dict[str, list[float]] = {}
+
+
+def login_rate_ok(client_ip: str) -> bool:
+    """Frena el probado de contraseñas por fuerza bruta."""
+    ahora = datetime.now().timestamp()
+    with _capture_lock:
+        recientes = [t for t in _login_hits.get(client_ip, []) if ahora - t < LOGIN_RATE_WINDOW]
+        if len(recientes) >= LOGIN_RATE_LIMIT:
+            _login_hits[client_ip] = recientes
+            return False
+        recientes.append(ahora)
+        _login_hits[client_ip] = recientes
+        return True
+
+
 def capture_rate_ok(client_ip: str) -> bool:
     ahora = datetime.now().timestamp()
     with _capture_lock:
@@ -725,9 +940,9 @@ def capture_qr_svg(url: str) -> bytes:
     return buffer.getvalue()
 
 
-def week_activity(db) -> list[dict]:
+def week_activity(db, user_id: int) -> list[dict]:
     """Los últimos siete días con marca de actividad, para los puntos de la racha."""
-    recorded = {row["metric_date"] for row in rows(db.execute("SELECT metric_date FROM daily_metrics ORDER BY metric_date DESC LIMIT 60"))}
+    recorded = {row["metric_date"] for row in rows(db.execute("SELECT metric_date FROM daily_metrics WHERE user_id=? ORDER BY metric_date DESC LIMIT 60", (user_id,)))}
     labels = ["L", "M", "M", "J", "V", "S", "D"]
     start = date.today() - timedelta(days=date.today().weekday())
     week = []
@@ -742,17 +957,17 @@ def week_activity(db) -> list[dict]:
     return week
 
 
-def dashboard_payload(db) -> dict:
-    new_achievements = sync_progress(db)
-    user = fetch_one(db, "SELECT * FROM users WHERE id=1")
-    profile_scores = rows(db.execute("SELECT * FROM profile_scores WHERE user_id=1 ORDER BY score DESC"))
-    task_list = rows(db.execute("SELECT t.*, c.name AS contact_name FROM tasks t LEFT JOIN contacts c ON c.id=t.contact_id WHERE due_date=? ORDER BY completed, due_time", (today(),)))
-    contact_counts = {item["kind"]: item["count"] for item in rows(db.execute("SELECT kind,COUNT(*) count FROM contacts GROUP BY kind"))}
-    metrics = fetch_one(db, "SELECT * FROM daily_metrics WHERE metric_date=?", (today(),)) or {}
-    sales_month = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE metric_date LIKE ?", (f"{today()[:7]}-%",)).fetchone()[0]
+def dashboard_payload(db, user_id: int) -> dict:
+    new_achievements = sync_progress(db, user_id)
+    user = fetch_one(db, "SELECT * FROM users WHERE id=?", (user_id,))
+    profile_scores = rows(db.execute("SELECT * FROM profile_scores WHERE user_id=? ORDER BY score DESC", (user_id,)))
+    task_list = rows(db.execute("SELECT t.*, c.name AS contact_name FROM tasks t LEFT JOIN contacts c ON c.id=t.contact_id WHERE t.user_id=? AND t.due_date=? ORDER BY t.completed, t.due_time", (user_id, today())))
+    contact_counts = {item["kind"]: item["count"] for item in rows(db.execute("SELECT kind,COUNT(*) count FROM contacts WHERE user_id=? GROUP BY kind", (user_id,)))}
+    metrics = fetch_one(db, "SELECT * FROM daily_metrics WHERE user_id=? AND metric_date=?", (user_id, today())) or {}
+    sales_month = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0]
     month_totals = fetch_one(db, """SELECT COALESCE(SUM(new_prospects),0) prospects, COALESCE(SUM(new_clients),0) clients,
-        COALESCE(SUM(new_associates),0) associates FROM daily_metrics WHERE metric_date LIKE ?""", (f"{today()[:7]}-%",)) or {}
-    week_prospects = db.execute("SELECT COALESCE(SUM(new_prospects),0) FROM daily_metrics WHERE metric_date>=?", (day_offset(-6),)).fetchone()[0]
+        COALESCE(SUM(new_associates),0) associates FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?""", (user_id, f"{today()[:7]}-%")) or {}
+    week_prospects = db.execute("SELECT COALESCE(SUM(new_prospects),0) FROM daily_metrics WHERE user_id=? AND metric_date>=?", (user_id, day_offset(-6))).fetchone()[0]
     user["level"] = user["xp"] // 250 + 1
     user["level_progress"] = user["xp"] % 250
     return {
@@ -767,13 +982,13 @@ def dashboard_payload(db) -> dict:
             "month_clients": month_totals.get("clients", 0),
             "month_associates": month_totals.get("associates", 0),
         },
-        "week_activity": week_activity(db),
-        "compensation": compensation_snapshot(db),
-        "goals": rows(db.execute("SELECT * FROM goals ORDER BY id")),
-        "achievements": rows(db.execute("SELECT * FROM achievements ORDER BY unlocked_at IS NULL, unlocked_at DESC, id")),
+        "week_activity": week_activity(db, user_id),
+        "compensation": compensation_snapshot(db, user_id),
+        "goals": rows(db.execute("SELECT * FROM goals WHERE user_id=? ORDER BY id", (user_id,))),
+        "achievements": rows(db.execute("SELECT * FROM achievements WHERE user_id=? ORDER BY unlocked_at IS NULL, unlocked_at DESC, id", (user_id,))),
         "new_achievements": new_achievements,
-        "recent_contacts": rows(db.execute("SELECT * FROM contacts ORDER BY COALESCE(last_contact,created_at) DESC LIMIT 5")),
-        "development": rows(db.execute("SELECT * FROM development_items ORDER BY id")),
+        "recent_contacts": rows(db.execute("SELECT * FROM contacts WHERE user_id=? ORDER BY COALESCE(last_contact,created_at) DESC LIMIT 5", (user_id,))),
+        "development": rows(db.execute("SELECT * FROM development_items WHERE user_id=? ORDER BY id", (user_id,))),
     }
 
 
@@ -810,9 +1025,41 @@ class AppHandler(BaseHTTPRequestHandler):
             raise ValueError("Se esperaba un objeto JSON")
         return payload
 
+    def read_cookie(self, name: str) -> str | None:
+        crudo = self.headers.get("Cookie", "")
+        for parte in crudo.split(";"):
+            clave, _, valor = parte.strip().partition("=")
+            if clave == name:
+                return valor
+        return None
+
+    def is_public(self, path: str) -> bool:
+        return path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES)
+
+    def require_session(self, path: str) -> bool:
+        """Resuelve la sesión. Devuelve False si ya respondió negando el acceso."""
+        self.account = None
+        self.user_id = None
+        with connect() as db:
+            self.account = session_account(db, self.read_cookie(SESSION_COOKIE))
+        if self.account:
+            self.user_id = self.account["user_id"]
+            return True
+        if self.is_public(path):
+            return True
+        if path.startswith("/api/"):
+            self.send_json({"error": "Necesitas iniciar sesión", "auth": False}, HTTPStatus.UNAUTHORIZED)
+        else:
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", "/login")
+            self.end_headers()
+        return False
+
     def dispatch(self, route) -> None:
         """Ninguna solicitud malformada debe tumbar el manejador."""
         try:
+            if not self.require_session(urlparse(self.path).path):
+                return
             route()
         except (UnicodeDecodeError, json.JSONDecodeError):
             self.send_json({"error": "El cuerpo de la solicitud no es JSON válido en UTF-8"}, HTTPStatus.BAD_REQUEST)
@@ -839,6 +1086,9 @@ class AppHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/captura/"):
             self.serve_static("/captura.html")
             return
+        if parsed.path == "/login":
+            self.serve_static("/login.html")
+            return
         self.serve_static(parsed.path)
 
     def do_POST(self) -> None:
@@ -858,8 +1108,75 @@ class AppHandler(BaseHTTPRequestHandler):
             self.create_capture_session()
         elif parsed.path.startswith("/api/captura/"):
             self.submit_capture(parsed.path.rsplit("/", 1)[-1])
+        elif parsed.path == "/api/auth/login":
+            self.login()
+        elif parsed.path == "/api/auth/logout":
+            self.logout()
+        elif parsed.path == "/api/auth/password":
+            self.change_password()
         else:
             self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
+
+    def login(self) -> None:
+        cliente = self.headers.get("X-Forwarded-For", self.client_address[0]).split(",")[0].strip()
+        if not login_rate_ok(cliente):
+            self.send_json({"error": "Demasiados intentos. Espera unos minutos antes de volver a probar."},
+                           HTTPStatus.TOO_MANY_REQUESTS)
+            return
+        data = self.read_json()
+        email = str(data.get("email", "")).strip().lower()
+        password = str(data.get("password", ""))
+        with connect() as db:
+            cuenta = fetch_one(db, "SELECT * FROM accounts WHERE email=? AND active=1", (email,))
+            # Mismo mensaje exista o no la cuenta: no revelar qué correos están dados de alta.
+            if not cuenta or not verify_password(password, cuenta["password_hash"]):
+                self.send_json({"error": "Correo o contraseña incorrectos"}, HTTPStatus.UNAUTHORIZED)
+                return
+            token = create_session(db, cuenta["id"])
+            db.execute("UPDATE accounts SET last_login=? WHERE id=?",
+                       (datetime.now().isoformat(timespec="seconds"), cuenta["id"]))
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        seguro = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" or USE_TURSO else ""
+        self.send_header("Set-Cookie",
+                         f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_DAYS * 86400}{seguro}")
+        cuerpo = json.dumps({"ok": True, "name": cuenta["name"], "role": cuenta["role"],
+                             "must_change_password": bool(cuenta["must_change_password"])}, ensure_ascii=False).encode("utf-8")
+        self.send_header("Content-Length", str(len(cuerpo)))
+        self.end_headers()
+        self.wfile.write(cuerpo)
+
+    def logout(self) -> None:
+        token = self.read_cookie(SESSION_COOKIE)
+        if token:
+            with connect() as db:
+                db.execute("DELETE FROM sessions WHERE token=?", (token,))
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+        cuerpo = json.dumps({"ok": True}).encode("utf-8")
+        self.send_header("Content-Length", str(len(cuerpo)))
+        self.end_headers()
+        self.wfile.write(cuerpo)
+
+    def change_password(self) -> None:
+        data = self.read_json()
+        actual = str(data.get("current_password", ""))
+        nueva = str(data.get("new_password", ""))
+        if len(nueva) < 10:
+            self.send_json({"error": "La contraseña nueva debe tener al menos 10 caracteres"}, HTTPStatus.BAD_REQUEST)
+            return
+        with connect() as db:
+            cuenta = fetch_one(db, "SELECT * FROM accounts WHERE id=?", (self.account["id"],))
+            if not cuenta or not verify_password(actual, cuenta["password_hash"]):
+                self.send_json({"error": "Tu contraseña actual no coincide"}, HTTPStatus.UNAUTHORIZED)
+                return
+            db.execute("UPDATE accounts SET password_hash=?, must_change_password=0 WHERE id=?",
+                       (hash_password(nueva), cuenta["id"]))
+            # Cerrar las demás sesiones por seguridad.
+            db.execute("DELETE FROM sessions WHERE account_id=? AND token<>?",
+                       (cuenta["id"], self.read_cookie(SESSION_COOKIE) or ""))
+        self.send_json({"ok": True, "message": "Tu contraseña quedó actualizada"})
 
     def do_PATCH(self) -> None:
         self.dispatch(self.route_patch)
@@ -905,12 +1222,16 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def handle_api_get(self, parsed) -> None:
         with connect() as db:
-            if parsed.path == "/api/health":
+            if parsed.path == "/api/auth/me":
+                self.send_json({"name": self.account["name"], "email": self.account["email"],
+                                "role": self.account["role"],
+                                "must_change_password": bool(self.account["must_change_password"])})
+            elif parsed.path == "/api/health":
                 self.send_json({"ok": True, "database": "turso" if USE_TURSO else "sqlite", "date": today(), "version": APP_VERSION})
             elif parsed.path == "/api/export":
                 self.export_data(db)
             elif parsed.path == "/api/dashboard":
-                self.send_json(dashboard_payload(db))
+                self.send_json(dashboard_payload(db, self.user_id))
             elif parsed.path.startswith("/api/captura/"):
                 token = parsed.path.rsplit("/", 1)[-1]
                 sesion = find_capture_session(db, token)
@@ -923,24 +1244,24 @@ class AppHandler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/capture-sessions":
                 self.send_json(rows(db.execute(
                     """SELECT s.*, (SELECT COUNT(*) FROM contacts c WHERE c.capture_session_id=s.id) registros
-                       FROM capture_sessions s ORDER BY s.active DESC, s.id DESC""")))
+                       FROM capture_sessions s WHERE s.user_id=? ORDER BY s.active DESC, s.id DESC""", (self.user_id,))))
             elif parsed.path.startswith("/api/capture-sessions/") and parsed.path.endswith("/qr.svg"):
                 self.send_capture_qr(db, parsed)
             elif parsed.path == "/api/compensation":
-                self.send_json({**compensation_snapshot(db), "ranks": RANKS})
+                self.send_json({**compensation_snapshot(db, self.user_id), "ranks": RANKS})
             elif parsed.path == "/api/tasks":
                 query = parse_qs(parsed.query)
                 due = query.get("date", [today()])[0]
                 self.send_json(rows(db.execute(
-                    "SELECT t.*, c.name AS contact_name FROM tasks t LEFT JOIN contacts c ON c.id=t.contact_id WHERE due_date=? ORDER BY completed, due_time",
-                    (due,))))
+                    "SELECT t.*, c.name AS contact_name FROM tasks t LEFT JOIN contacts c ON c.id=t.contact_id WHERE t.user_id=? AND t.due_date=? ORDER BY t.completed, t.due_time",
+                    (self.user_id, due))))
             elif parsed.path == "/api/contacts":
                 query = parse_qs(parsed.query)
                 kind = query.get("kind", [""])[0]
                 source = query.get("source", [""])[0]
                 search = query.get("q", [""])[0]
-                sql = "SELECT * FROM contacts WHERE 1=1"
-                values = []
+                sql = "SELECT * FROM contacts WHERE user_id=?"
+                values = [self.user_id]
                 if kind:
                     sql += " AND kind=?"
                     values.append(kind)
@@ -957,9 +1278,9 @@ class AppHandler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/contact-sources":
                 self.send_json(rows(db.execute(
                     """SELECT COALESCE(NULLIF(TRIM(source),''),'Sin fuente') source, COUNT(*) count
-                       FROM contacts GROUP BY 1 ORDER BY count DESC, source""")))
+                       FROM contacts WHERE user_id=? GROUP BY 1 ORDER BY count DESC, source""", (self.user_id,))))
             elif parsed.path == "/api/metrics":
-                self.send_json(rows(db.execute("SELECT * FROM daily_metrics ORDER BY metric_date DESC LIMIT 14")))
+                self.send_json(rows(db.execute("SELECT * FROM daily_metrics WHERE user_id=? ORDER BY metric_date DESC LIMIT 14", (self.user_id,))))
             else:
                 self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
 
@@ -990,12 +1311,12 @@ class AppHandler(BaseHTTPRequestHandler):
         columns = list(values)
         with connect() as db:
             cursor = db.execute(
-                f"INSERT INTO contacts ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
-                [values[column] for column in columns],
+                f"INSERT INTO contacts (user_id,{','.join(columns)}) VALUES (?,{','.join('?' for _ in columns)})",
+                [self.user_id] + [values[column] for column in columns],
             )
-            db.execute("UPDATE users SET xp=xp+25 WHERE id=1")
+            db.execute("UPDATE users SET xp=xp+25 WHERE id=?", (self.user_id,))
             contact = fetch_one(db, "SELECT * FROM contacts WHERE id=?", (cursor.lastrowid,))
-            unlocked = evaluate_achievements(db)
+            unlocked = evaluate_achievements(db, self.user_id)
         self.send_json({**contact, "new_achievements": unlocked}, HTTPStatus.CREATED)
 
     def update_contact(self, contact_id: int | None) -> None:
@@ -1004,7 +1325,7 @@ class AppHandler(BaseHTTPRequestHandler):
             return
         data = self.read_json()
         with connect() as db:
-            actual = fetch_one(db, "SELECT * FROM contacts WHERE id=?", (contact_id,))
+            actual = fetch_one(db, "SELECT * FROM contacts WHERE id=? AND user_id=?", (contact_id, self.user_id))
         if not actual:
             self.send_json({"error": "No encontrado"}, HTTPStatus.NOT_FOUND)
             return
@@ -1015,8 +1336,8 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "No hay cambios válidos"}, HTTPStatus.BAD_REQUEST)
             return
         with connect() as db:
-            db.execute(f"UPDATE contacts SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=?", [value for _, value in updates] + [contact_id])
-            record = fetch_one(db, "SELECT * FROM contacts WHERE id=?", (contact_id,))
+            db.execute(f"UPDATE contacts SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=? AND user_id=?", [value for _, value in updates] + [contact_id, self.user_id])
+            record = fetch_one(db, "SELECT * FROM contacts WHERE id=? AND user_id=?", (contact_id, self.user_id))
         self.send_json(record if record else {"error": "No encontrado"}, HTTPStatus.OK if record else HTTPStatus.NOT_FOUND)
 
     def delete_record(self, table: str, record_id: int | None, message: str) -> None:
@@ -1024,11 +1345,11 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
             return
         with connect() as db:
-            existing = fetch_one(db, f"SELECT id FROM {table} WHERE id=?", (record_id,))
+            existing = fetch_one(db, f"SELECT id FROM {table} WHERE id=? AND user_id=?", (record_id, self.user_id))
             if not existing:
                 self.send_json({"error": "No encontrado"}, HTTPStatus.NOT_FOUND)
                 return
-            db.execute(f"DELETE FROM {table} WHERE id=?", (record_id,))
+            db.execute(f"DELETE FROM {table} WHERE id=? AND user_id=?", (record_id, self.user_id))
         self.send_json({"ok": True, "message": message})
 
     def task_fields(self, data: dict) -> dict:
@@ -1052,8 +1373,8 @@ class AppHandler(BaseHTTPRequestHandler):
         )
         with connect() as db:
             cursor = db.execute(
-                "INSERT INTO tasks (title,detail,category,profile_tag,points,due_date,due_time,contact_id) VALUES (?,?,?,?,?,?,?,?)",
-                values,
+                "INSERT INTO tasks (user_id,title,detail,category,profile_tag,points,due_date,due_time,contact_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                (self.user_id,) + values,
             )
             task = fetch_one(db, "SELECT * FROM tasks WHERE id=?", (cursor.lastrowid,))
         self.send_json(task, HTTPStatus.CREATED)
@@ -1064,29 +1385,29 @@ class AppHandler(BaseHTTPRequestHandler):
             return
         data = self.read_json()
         with connect() as db:
-            task = fetch_one(db, "SELECT * FROM tasks WHERE id=?", (task_id,))
+            task = fetch_one(db, "SELECT * FROM tasks WHERE id=? AND user_id=?", (task_id, self.user_id))
             if not task:
                 self.send_json({"error": "Misión no encontrada"}, HTTPStatus.NOT_FOUND)
                 return
             limpio = self.task_fields({**task, **data})
             updates = [(key, limpio[key]) for key in data if key in limpio]
             if updates:
-                db.execute(f"UPDATE tasks SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=?",
-                           [value for _, value in updates] + [task_id])
+                db.execute(f"UPDATE tasks SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=? AND user_id=?",
+                           [value for _, value in updates] + [task_id, self.user_id])
             unlocked = []
             if "completed" in data:
                 completed = 1 if data.get("completed") else 0
                 was_completed = task["completed"]
-                db.execute("UPDATE tasks SET completed=? WHERE id=?", (completed, task_id))
+                db.execute("UPDATE tasks SET completed=? WHERE id=? AND user_id=?", (completed, task_id, self.user_id))
                 if completed and not was_completed:
-                    db.execute("UPDATE users SET xp=xp+? WHERE id=1", (task["points"],))
+                    db.execute("UPDATE users SET xp=xp+? WHERE id=?", (task["points"], self.user_id))
                 elif not completed and was_completed:
-                    db.execute("UPDATE users SET xp=MAX(0,xp-?) WHERE id=1", (task["points"],))
-                unlocked = evaluate_achievements(db)
+                    db.execute("UPDATE users SET xp=MAX(0,xp-?) WHERE id=?", (task["points"], self.user_id))
+                unlocked = evaluate_achievements(db, self.user_id)
             elif not updates:
                 self.send_json({"error": "No hay cambios válidos"}, HTTPStatus.BAD_REQUEST)
                 return
-            user = fetch_one(db, "SELECT * FROM users WHERE id=1")
+            user = fetch_one(db, "SELECT * FROM users WHERE id=?", (self.user_id,))
         self.send_json({"ok": True, "xp": user["xp"], "level": user["xp"] // 250 + 1, "new_achievements": unlocked})
 
     def update_goal(self, goal_id: int | None) -> None:
@@ -1109,9 +1430,9 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "No hay cambios válidos"}, HTTPStatus.BAD_REQUEST)
             return
         with connect() as db:
-            db.execute(f"UPDATE goals SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=?",
-                       [value for _, value in updates] + [goal_id])
-            record = fetch_one(db, "SELECT * FROM goals WHERE id=?", (goal_id,))
+            db.execute(f"UPDATE goals SET {','.join(f'{key}=?' for key, _ in updates)} WHERE id=? AND user_id=?",
+                       [value for _, value in updates] + [goal_id, self.user_id])
+            record = fetch_one(db, "SELECT * FROM goals WHERE id=? AND user_id=?", (goal_id, self.user_id))
         self.send_json(record if record else {"error": "No encontrada"}, HTTPStatus.OK if record else HTTPStatus.NOT_FOUND)
 
     def update_development(self, item_id: int | None) -> None:
@@ -1125,12 +1446,12 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "El avance debe ser un número entre 0 y 100"}, HTTPStatus.BAD_REQUEST)
             return
         with connect() as db:
-            record = fetch_one(db, "SELECT * FROM development_items WHERE id=?", (item_id,))
+            record = fetch_one(db, "SELECT * FROM development_items WHERE id=? AND user_id=?", (item_id, self.user_id))
             if not record:
                 self.send_json({"error": "No encontrada"}, HTTPStatus.NOT_FOUND)
                 return
-            db.execute("UPDATE development_items SET progress=? WHERE id=?", (progress, item_id))
-            record = fetch_one(db, "SELECT * FROM development_items WHERE id=?", (item_id,))
+            db.execute("UPDATE development_items SET progress=? WHERE id=? AND user_id=?", (progress, item_id, self.user_id))
+            record = fetch_one(db, "SELECT * FROM development_items WHERE id=? AND user_id=?", (item_id, self.user_id))
         self.send_json(record)
 
     def public_base_url(self) -> str:
@@ -1144,7 +1465,7 @@ class AppHandler(BaseHTTPRequestHandler):
         titulo = clean_text(data.get("title"), 120, "El nombre de la sesión", required=True)
         token = new_capture_token()
         with connect() as db:
-            cursor = db.execute("INSERT INTO capture_sessions (title,token,active) VALUES (?,?,1)", (titulo, token))
+            cursor = db.execute("INSERT INTO capture_sessions (user_id,title,token,active) VALUES (?,?,?,1)", (self.user_id, titulo, token))
             sesion = fetch_one(db, "SELECT * FROM capture_sessions WHERE id=?", (cursor.lastrowid,))
         self.send_json({**sesion, "registros": 0, "url": f"{self.public_base_url()}/captura/{token}"}, HTTPStatus.CREATED)
 
@@ -1164,9 +1485,9 @@ class AppHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "No hay cambios válidos"}, HTTPStatus.BAD_REQUEST)
             return
         with connect() as db:
-            db.execute(f"UPDATE capture_sessions SET {','.join(f'{k}=?' for k, _ in updates)} WHERE id=?",
-                       [v for _, v in updates] + [session_id])
-            sesion = fetch_one(db, "SELECT * FROM capture_sessions WHERE id=?", (session_id,))
+            db.execute(f"UPDATE capture_sessions SET {','.join(f'{k}=?' for k, _ in updates)} WHERE id=? AND user_id=?",
+                       [v for _, v in updates] + [session_id, self.user_id])
+            sesion = fetch_one(db, "SELECT * FROM capture_sessions WHERE id=? AND user_id=?", (session_id, self.user_id))
         if not sesion:
             self.send_json({"error": "No encontrada"}, HTTPStatus.NOT_FOUND)
             return
@@ -1174,7 +1495,7 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def send_capture_qr(self, db, parsed) -> None:
         session_id = self.parse_id(parsed.path.split("/")[3])
-        sesion = fetch_one(db, "SELECT * FROM capture_sessions WHERE id=?", (session_id,)) if session_id else None
+        sesion = fetch_one(db, "SELECT * FROM capture_sessions WHERE id=? AND user_id=?", (session_id, self.user_id)) if session_id else None
         if not sesion:
             self.send_json({"error": "No encontrada"}, HTTPStatus.NOT_FOUND)
             return
@@ -1223,22 +1544,25 @@ class AppHandler(BaseHTTPRequestHandler):
                 "last_contact": today(),
                 "notes": clean_text(data.get("notes"), 600, "Tus comentarios"),
                 "capture_session_id": sesion["id"],
+                "user_id": sesion["user_id"],
             }
             columnas = list(valores)
             db.execute(
                 f"INSERT INTO contacts ({','.join(columnas)}) VALUES ({','.join('?' for _ in columnas)})",
                 [valores[c] for c in columnas],
             )
-            db.execute("UPDATE users SET xp=xp+25 WHERE id=1")
-            evaluate_achievements(db)
+            db.execute("UPDATE users SET xp=xp+25 WHERE id=?", (sesion["user_id"],))
+            evaluate_achievements(db, sesion["user_id"])
         self.send_json({"ok": True, "message": "¡Gracias! Tus datos quedaron registrados."}, HTTPStatus.CREATED)
 
     def export_data(self, db) -> None:
-        tables = ["users", "profile_scores", "contacts", "tasks", "daily_metrics", "goals", "achievements",
-                  "development_items", "capture_sessions"]
-        payload = {"exported_at": datetime.now().isoformat(timespec="seconds"), "data": {}}
-        for table in tables:
-            payload["data"][table] = rows(db.execute(f"SELECT * FROM {table}"))
+        # El respaldo solo puede contener los datos de quien lo pide.
+        payload = {"exported_at": datetime.now().isoformat(timespec="seconds"),
+                   "account": self.account["email"], "data": {}}
+        payload["data"]["users"] = rows(db.execute("SELECT * FROM users WHERE id=?", (self.user_id,)))
+        for table in ("profile_scores", "contacts", "tasks", "daily_metrics", "goals", "achievements",
+                      "development_items", "capture_sessions"):
+            payload["data"][table] = rows(db.execute(f"SELECT * FROM {table} WHERE user_id=?", (self.user_id,)))
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1259,16 +1583,16 @@ class AppHandler(BaseHTTPRequestHandler):
         values.append(clean_text(data.get("products_sold"), 300, "Los productos vendidos"))
         with connect() as db:
             db.execute(
-                """INSERT INTO daily_metrics (metric_date,new_prospects,presentations,new_clients,new_associates,sales,volume_points,client_orders,products_sold)
-                VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(metric_date) DO UPDATE SET
+                """INSERT INTO daily_metrics (user_id,metric_date,new_prospects,presentations,new_clients,new_associates,sales,volume_points,client_orders,products_sold)
+                VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,metric_date) DO UPDATE SET
                 new_prospects=excluded.new_prospects,presentations=excluded.presentations,new_clients=excluded.new_clients,
                 new_associates=excluded.new_associates,sales=excluded.sales,volume_points=excluded.volume_points,
                 client_orders=excluded.client_orders,products_sold=excluded.products_sold""",
-                [metric_date] + values,
+                [self.user_id, metric_date] + values,
             )
-            db.execute("UPDATE users SET xp=xp+15 WHERE id=1")
-            unlocked = sync_progress(db)
-            streak = fetch_one(db, "SELECT streak FROM users WHERE id=1")["streak"]
+            db.execute("UPDATE users SET xp=xp+15 WHERE id=?", (self.user_id,))
+            unlocked = sync_progress(db, self.user_id)
+            streak = fetch_one(db, "SELECT streak FROM users WHERE id=?", (self.user_id,))["streak"]
         self.send_json({"ok": True, "message": "Avance guardado +15 XP", "streak": streak, "new_achievements": unlocked})
 
     def save_profile_scores(self) -> None:
@@ -1280,9 +1604,9 @@ class AppHandler(BaseHTTPRequestHandler):
             return
         with connect() as db:
             for key, score in scores.items():
-                db.execute("UPDATE profile_scores SET score=? WHERE user_id=1 AND profile_key=?", (int(score), key))
-            winner = db.execute("SELECT label FROM profile_scores WHERE user_id=1 ORDER BY score DESC LIMIT 1").fetchone()[0]
-            db.execute("UPDATE users SET dominant_profile=?, xp=xp+75 WHERE id=1", (winner,))
+                db.execute("UPDATE profile_scores SET score=? WHERE user_id=? AND profile_key=?", (int(score), self.user_id, key))
+            winner = db.execute("SELECT label FROM profile_scores WHERE user_id=? ORDER BY score DESC LIMIT 1", (self.user_id,)).fetchone()[0]
+            db.execute("UPDATE users SET dominant_profile=?, xp=xp+75 WHERE id=?", (winner, self.user_id))
         self.send_json({"ok": True, "dominant_profile": winner, "message": "Tu brújula fue actualizada +75 XP"})
 
     def update_profile(self) -> None:
@@ -1301,10 +1625,10 @@ class AppHandler(BaseHTTPRequestHandler):
         with connect() as db:
             db.execute(
                 """UPDATE users SET name=?,gender=?,email=?,phone=?,city=?,
-                purpose=?,target_income=?,goal_date=?,rank=? WHERE id=1""",
-                values,
+                purpose=?,target_income=?,goal_date=?,rank=? WHERE id=?""",
+                values + (self.user_id,),
             )
-            user = fetch_one(db, "SELECT * FROM users WHERE id=1")
+            user = fetch_one(db, "SELECT * FROM users WHERE id=?", (self.user_id,))
         user["level"] = user["xp"] // 250 + 1
         user["level_progress"] = user["xp"] % 250
         self.send_json({"ok": True, "user": user, "message": "Tu perfil y tu experiencia visual fueron actualizados"})
@@ -1349,10 +1673,28 @@ def main() -> None:
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8787)))
     parser.add_argument("--init-only", action="store_true")
+    parser.add_argument("--add-account", nargs=2, metavar=("CORREO", "NOMBRE"),
+                        help="Crea una cuenta con su propio CRM y muestra la contraseña una sola vez")
+    parser.add_argument("--gender", default="neutral", choices=sorted(VALID_GENDERS))
+    parser.add_argument("--role", default="admin", choices=sorted(VALID_ROLES))
+    parser.add_argument("--list-accounts", action="store_true")
     args = parser.parse_args()
     global APP_VERSION
     APP_VERSION = app_version()
     initialize_database()
+    if args.add_account:
+        correo, nombre = args.add_account
+        cuenta = create_account(correo, nombre, gender=args.gender, role=args.role)
+        print(f"\n  Cuenta creada: {cuenta['name']} <{cuenta['email']}>  ({cuenta['role']})")
+        print(f"  Contraseña temporal: {cuenta['password']}")
+        print("  Guárdala ahora: no se vuelve a mostrar, en la base solo queda su hash.\n")
+        return
+    if args.list_accounts:
+        with connect() as db:
+            for c in rows(db.execute("SELECT name,email,role,active,last_login FROM accounts ORDER BY id")):
+                estado = "activa" if c["active"] else "desactivada"
+                print(f"  {c['email']:<34} {c['name']:<32} {c['role']:<10} {estado:<12} último acceso: {c['last_login'] or 'nunca'}")
+        return
     if args.init_only:
         print(f"Base de datos lista ({'Turso' if USE_TURSO else DB_PATH})")
         return

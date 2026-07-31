@@ -1,4 +1,4 @@
-const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", activeSource: "", search: "", editingContactId: null, editingTaskId: null, version: null, ranks: [], captureSession: null, captureSessions: [] };
+const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", activeSource: "", search: "", editingContactId: null, editingTaskId: null, version: null, ranks: [], captureSession: null, captureSessions: [], account: null };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -78,6 +78,11 @@ async function api(path, options = {}) {
     payload = await response.json();
   } catch {
     throw new Error(response.ok ? "El servidor devolvió una respuesta inesperada." : `Error ${response.status} del servidor.`);
+  }
+  if (response.status === 401) {
+    // La sesión expiró o nunca existió: volver al inicio de sesión.
+    location.href = "/login";
+    throw new Error("Tu sesión terminó. Vuelve a entrar.");
   }
   if (!response.ok) throw new Error(payload.error || `Error ${response.status} del servidor.`);
   return payload;
@@ -1009,6 +1014,9 @@ function bindEvents() {
   });
   $("#downloadBackup").addEventListener("click", () => { window.location.href = "/api/export"; toast("Preparando tu respaldo…"); });
   $("#reloadApp").addEventListener("click", () => location.reload());
+  $("#logoutButton").addEventListener("click", logout);
+  $("#passwordForm").addEventListener("submit", submitPassword);
+  $$('[data-close-password]').forEach((b) => b.addEventListener("click", () => $("#passwordDialog").close()));
   // Si el usuario vuelve a la pestaña tras un rato, comprobar si hay código nuevo.
   document.addEventListener("visibilitychange", () => { if (!document.hidden) checkForUpdate(); });
   $("#openQuiz").addEventListener("click", () => $("#quizDialog").showModal());
@@ -1073,6 +1081,54 @@ async function checkForUpdate() {
   } catch { /* Sin conexión no hay nada que avisar. */ }
 }
 
+async function loadAccount() {
+  try {
+    const cuenta = await api("/api/auth/me");
+    state.account = cuenta;
+    $("#accountEmail").textContent = cuenta.email;
+    if (cuenta.must_change_password) {
+      $("#passwordHint").textContent = "Estás usando la contraseña temporal que te compartieron. Cámbiala por una que solo tú conozcas.";
+      $("#passwordDialog").showModal();
+    }
+  } catch { /* Si no hay sesión, api() ya redirigió al login. */ }
+}
+
+async function logout() {
+  const ok = await confirmar({
+    title: "Cerrar sesión",
+    message: "Vas a salir de BRÚJULA. Tus datos quedan guardados.",
+    confirmText: "Sí, salir",
+    danger: false,
+  });
+  if (!ok) return;
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+  } catch { /* Aunque falle, conviene mandar al login. */ }
+  location.href = "/login";
+}
+
+async function submitPassword(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  limpiarErrores(form);
+  if (!data.current_password) return marcarError(form, "current_password", "Escribe tu contraseña actual.");
+  if ((data.new_password || "").length < 10) return marcarError(form, "new_password", "La contraseña nueva debe tener al menos 10 caracteres.");
+  if (data.new_password !== data.repeat_password) return marcarError(form, "repeat_password", "Las dos contraseñas no coinciden.");
+  await withLoading($("#passwordSubmit"), async () => {
+    try {
+      const resultado = await api("/api/auth/password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: data.current_password, new_password: data.new_password }),
+      });
+      $("#passwordDialog").close();
+      form.reset();
+      toast(resultado.message, "success");
+      if (state.account) state.account.must_change_password = false;
+    } catch (error) { toast(error.message, "error"); }
+  });
+}
+
 async function loadRanks() {
   try {
     const plan = await api("/api/compensation");
@@ -1087,6 +1143,7 @@ async function init() {
   restoreGuideChecklist();
   const initialView = location.hash.replace("#", "");
   if (viewTitles[initialView]) goToView(initialView);
+  await loadAccount();
   await loadRanks();
   await Promise.all([loadDashboard(), loadMetrics(), showStorageMode()]);
 }
