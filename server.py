@@ -576,6 +576,22 @@ def create_account(email: str, name: str, gender: str = "neutral", role: str = "
     return {"email": email, "name": name, "role": role, "user_id": user_id, "password": password}
 
 
+def reset_account_password(email: str, password: str | None = None) -> dict:
+    """Asigna una contraseña nueva y cierra las sesiones abiertas de esa cuenta."""
+    email = clean_email(email, "El correo").lower()
+    password = password or generate_password()
+    with connect() as db:
+        cuenta = fetch_one(db, "SELECT id,name,email,role FROM accounts WHERE email=?", (email,))
+        if not cuenta:
+            raise ValueError(f"No hay ninguna cuenta con el correo {email}")
+        db.execute("UPDATE accounts SET password_hash=?, must_change_password=1 WHERE id=?",
+                   (hash_password(password), cuenta["id"]))
+        # Quien tuviera la sesión abierta con la contraseña anterior queda fuera.
+        cerradas = db.execute("SELECT COUNT(*) FROM sessions WHERE account_id=?", (cuenta["id"],)).fetchone()[0]
+        db.execute("DELETE FROM sessions WHERE account_id=?", (cuenta["id"],))
+    return {**cuenta, "password": password, "closed_sessions": cerradas}
+
+
 def initialize_database() -> None:
     if not USE_TURSO:
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -1677,6 +1693,8 @@ def main() -> None:
                         help="Crea una cuenta con su propio CRM y muestra la contraseña una sola vez")
     parser.add_argument("--gender", default="neutral", choices=sorted(VALID_GENDERS))
     parser.add_argument("--role", default="admin", choices=sorted(VALID_ROLES))
+    parser.add_argument("--reset-password", metavar="CORREO",
+                        help="Genera una contraseña nueva para una cuenta existente y cierra sus sesiones")
     parser.add_argument("--list-accounts", action="store_true")
     args = parser.parse_args()
     global APP_VERSION
@@ -1684,10 +1702,26 @@ def main() -> None:
     initialize_database()
     if args.add_account:
         correo, nombre = args.add_account
-        cuenta = create_account(correo, nombre, gender=args.gender, role=args.role)
+        try:
+            cuenta = create_account(correo, nombre, gender=args.gender, role=args.role)
+        except ValueError as error:
+            print(f"\n  No se pudo crear la cuenta: {error}\n")
+            raise SystemExit(1)
         print(f"\n  Cuenta creada: {cuenta['name']} <{cuenta['email']}>  ({cuenta['role']})")
         print(f"  Contraseña temporal: {cuenta['password']}")
         print("  Guárdala ahora: no se vuelve a mostrar, en la base solo queda su hash.\n")
+        return
+    if args.reset_password:
+        try:
+            cuenta = reset_account_password(args.reset_password)
+        except ValueError as error:
+            print(f"\n  No se pudo reiniciar: {error}")
+            print("  Revisa los correos dados de alta con --list-accounts\n")
+            raise SystemExit(1)
+        print(f"\n  Contraseña reiniciada: {cuenta['name']} <{cuenta['email']}>")
+        print(f"  Contraseña temporal nueva: {cuenta['password']}")
+        print(f"  Sesiones cerradas: {cuenta['closed_sessions']}")
+        print("  Guárdala ahora: no se vuelve a mostrar. Se le pedirá cambiarla al entrar.\n")
         return
     if args.list_accounts:
         with connect() as db:
