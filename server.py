@@ -20,6 +20,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import frases
+
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "data" / "brujula.db"
@@ -973,6 +975,104 @@ def week_activity(db, user_id: int) -> list[dict]:
     return week
 
 
+MOMENT_ORDER = {"mañana": 0, "tarde": 1, "noche": 2}
+
+
+def pick_phrase(opciones: list, user_id: int, momento: str, semilla: str = ""):
+    """Elige de forma estable: la misma frase durante todo el momento del día.
+
+    Si cambiara en cada recarga se sentiría ruidoso. El desplazamiento por momento
+    garantiza que mañana, tarde y noche nunca caigan en la misma frase, cosa que
+    con solo mezclar el momento en el hash sí llegaba a pasar por casualidad.
+    """
+    if not opciones:
+        return None
+    base = int(hashlib.sha256(f"{user_id}|{today()}|{semilla}".encode("utf-8")).hexdigest(), 16)
+    paso = max(1, len(opciones) // 3)
+    return opciones[(base + MOMENT_ORDER.get(momento, 0) * paso) % len(opciones)]
+
+
+def daily_motivation(db, user_id: int, user: dict, tasks: list, metrics: dict) -> dict:
+    """Acompañamiento del día: cambia por la mañana, la tarde y la noche."""
+    hora = datetime.now().hour
+    momento = "mañana" if hora < 12 else ("tarde" if hora < 19 else "noche")
+    pendientes = [t for t in tasks if not t["completed"]]
+    completadas = [t for t in tasks if t["completed"]]
+    llamadas = [t for t in pendientes if (t.get("category") or "") == "Llamada"]
+
+    perfil = user.get("dominant_profile") or ""
+    frase_perfil = pick_phrase(frases.PERFILES.get(perfil, []), user_id, momento, "perfil")
+
+    datos = {
+        "moment": momento,
+        "profile": perfil,
+        "profile_phrase": frase_perfil,
+        "pending": len(pendientes),
+        "completed": len(completadas),
+        "pending_calls": len(llamadas),
+    }
+
+    if momento == "noche":
+        contactos_hoy = db.execute(
+            "SELECT COUNT(*) FROM contacts WHERE user_id=? AND DATE(created_at)=?", (user_id, today())
+        ).fetchone()[0]
+        hubo_actividad = bool(completadas or contactos_hoy or metrics)
+        banco = frases.CIERRES if hubo_actividad else frases.CIERRES_SIN_ACTIVIDAD
+        resumen = []
+        if completadas:
+            resumen.append(f"{len(completadas)} misión{'es' if len(completadas) != 1 else ''} completada{'s' if len(completadas) != 1 else ''}")
+        if contactos_hoy:
+            resumen.append(f"{contactos_hoy} persona{'s' if contactos_hoy != 1 else ''} nueva{'s' if contactos_hoy != 1 else ''} en tu red")
+        if metrics.get("volume_points"):
+            resumen.append(f"{metrics['volume_points']:,.0f} VVP registrados")
+        if metrics.get("sales"):
+            resumen.append(f"{metrics['sales']:,.0f} MXN en ventas")
+        return {**datos,
+                "kind": "cierre",
+                "kicker": "CIERRE DEL DÍA",
+                "title": pick_phrase(banco, user_id, momento, "cierre"),
+                "message": ("Hoy registraste " + " · ".join(resumen) + ".") if resumen
+                           else "Mañana empiezas de nuevo, sin arrastrar nada.",
+                "summary": resumen,
+                "action": None if not pendientes else {"label": "Ver lo que quedó pendiente", "view": "agenda"}}
+
+    if llamadas:
+        contacto = llamadas[0].get("contact_name")
+        return {**datos,
+                "kind": "llamadas",
+                "kicker": "EMPECEMOS POR LAS LLAMADAS",
+                "title": pick_phrase(frases.LLAMADAS, user_id, momento, "llamada"),
+                "message": (f"Tienes {len(llamadas)} llamada{'s' if len(llamadas) != 1 else ''} de seguimiento para hoy"
+                            + (f", empezando por {contacto}." if contacto else ".")),
+                "action": {"label": "Ver mis llamadas", "view": "agenda"}}
+
+    if pendientes:
+        titulo, cuerpo = pick_phrase(frases.RECORDATORIOS, user_id, momento, "recordatorio")
+        return {**datos,
+                "kind": "recordatorio",
+                "kicker": "TU SIGUIENTE PASO",
+                "title": titulo,
+                "message": f"{cuerpo} Te {'quedan' if len(pendientes) != 1 else 'queda'} {len(pendientes)} actividad{'es' if len(pendientes) != 1 else ''} en la agenda de hoy.",
+                "action": {"label": "Abrir mi agenda", "view": "agenda"}}
+
+    if tasks:
+        return {**datos,
+                "kind": "logrado",
+                "kicker": "AGENDA COMPLETA",
+                "title": "Terminaste todo lo de hoy 🎉",
+                "message": (f"Completaste tu única misión de hoy." if len(completadas) == 1
+                            else f"Completaste tus {len(completadas)} misiones.")
+                           + " Si te queda energía, adelanta un seguimiento de mañana.",
+                "action": {"label": "Ver mi red", "view": "contacts"}}
+
+    return {**datos,
+            "kind": "motivacion",
+            "kicker": "PARA EMPEZAR",
+            "title": pick_phrase(frases.GENERALES, user_id, momento, "general"),
+            "message": "Todavía no tienes misiones para hoy. Crea la primera y dale rumbo a tu día.",
+            "action": {"label": "Crear una misión", "view": "agenda"}}
+
+
 def dashboard_payload(db, user_id: int) -> dict:
     new_achievements = sync_progress(db, user_id)
     user = fetch_one(db, "SELECT * FROM users WHERE id=?", (user_id,))
@@ -998,6 +1098,7 @@ def dashboard_payload(db, user_id: int) -> dict:
             "month_clients": month_totals.get("clients", 0),
             "month_associates": month_totals.get("associates", 0),
         },
+        "motivation": daily_motivation(db, user_id, user, task_list, metrics),
         "week_activity": week_activity(db, user_id),
         "compensation": compensation_snapshot(db, user_id),
         "goals": rows(db.execute("SELECT * FROM goals WHERE user_id=? ORDER BY id", (user_id,))),

@@ -354,6 +354,22 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .plan-bonus h3 { margin:9px 0 7px; color:var(--navy-900); font-size:14px; }
 .plan-bonus p { margin:0; color:var(--muted); font-size:10px; line-height:1.65; }
 
+/* Acompañamiento del día */
+.motivation-card { display:grid; grid-template-columns:62px 1fr auto; gap:20px; align-items:center; margin-bottom:17px; padding:22px 24px; border:0; color:#fff; background:linear-gradient(125deg,#2a2160,#7755c7); }
+.motivation-card[data-moment="tarde"] { background:linear-gradient(125deg,#1a3a5c,#2878d0); }
+.motivation-card[data-moment="noche"] { background:linear-gradient(125deg,#141a3a,#3f3470); }
+.motivation-card[data-kind="logrado"] { background:linear-gradient(125deg,#1d4d38,#55a85b); }
+.motivation-icon { width:62px; height:62px; display:grid; place-items:center; border-radius:20px; background:rgba(255,255,255,.14); font-size:29px; }
+.motivation-card .mini-kicker { color:#d6c8ff; }
+.motivation-card[data-moment="tarde"] .mini-kicker { color:#bcdcff; }
+.motivation-card[data-kind="logrado"] .mini-kicker { color:#c6ecc9; }
+.motivation-body h3 { margin:7px 0 8px; font-size:19px; line-height:1.35; letter-spacing:-.02em; }
+.motivation-body p { margin:0; color:rgba(255,255,255,.82); font-size:11px; line-height:1.65; }
+.motivation-summary { display:flex; flex-wrap:wrap; gap:7px; margin-top:11px; }
+.motivation-summary span { padding:6px 11px; border-radius:9px; background:rgba(255,255,255,.14); font-size:9px; font-weight:750; }
+.motivation-profile { margin:13px 0 0; padding:11px 15px; border:0; border-left:3px solid rgba(255,255,255,.45); border-radius:0 10px 10px 0; background:rgba(255,255,255,.1); color:#fff; font-size:10px; font-style:italic; line-height:1.6; }
+.motivation-card .light-button { flex:0 0 auto; white-space:nowrap; }
+
 /* Plan de compensación: alertas y escalera de rangos */
 .alert-stack { display:grid; gap:10px; margin-bottom:8px; }
 .alert-card { display:grid; grid-template-columns:42px 1fr; gap:13px; align-items:center; padding:15px 18px; border:1px solid var(--line); border-left-width:4px; border-radius:14px; background:#fff; box-shadow:var(--shadow-sm); }
@@ -450,6 +466,7 @@ button:disabled { opacity:.6; cursor:not-allowed; }
 @media (max-width: 700px) {
   .main-content { padding:0 14px 40px; }.topbar { height:92px; }.topbar h1 { font-size:21px; }.eyebrow { font-size:8px; }.xp-pill,.icon-button,.top-actions .primary-button { display:none; }
   .hero-card { min-height:470px; background-position:60% center; }.hero-overlay { background:linear-gradient(0deg,rgba(17,25,50,.94),rgba(17,25,50,.35)); }.hero-copy { width:100%; padding:180px 24px 25px; }.hero-copy h2 { font-size:34px; }.hero-medal { right:20px; top:24px; bottom:auto; }
+  .motivation-card { grid-template-columns:1fr; gap:14px; padding:20px; }.motivation-icon { width:48px; height:48px; font-size:23px; }.motivation-body h3 { font-size:17px; }.motivation-card .light-button { width:100%; }
   .achievement-strip { grid-template-columns:1fr; }.guide-achievement-list { grid-template-columns:1fr; }
   .plan-concepts { grid-template-columns:1fr; }.plan-bonus-grid { grid-template-columns:1fr; }.plan-concept { grid-template-columns:40px 1fr; }
   .page-intro-actions { width:100%; flex-direction:column; align-items:stretch; }.page-intro-actions button { width:100%; }

@@ -285,6 +285,41 @@ function renderAchievements(achievements = []) {
 
 const vp = (value) => `${Number(value || 0).toLocaleString("es-MX", { maximumFractionDigits: 0 })}`;
 
+const momentIcons = { "mañana": "☀", tarde: "◐", noche: "☾" };
+
+function renderMotivation(motivacion) {
+  const tarjeta = $("#motivationCard");
+  if (!motivacion) { tarjeta.hidden = true; return; }
+  tarjeta.hidden = false;
+  tarjeta.dataset.moment = motivacion.moment;
+  tarjeta.dataset.kind = motivacion.kind;
+  $("#motivationIcon").textContent = momentIcons[motivacion.moment] || "✦";
+  $("#motivationKicker").textContent = motivacion.kicker;
+  $("#motivationTitle").textContent = motivacion.title;
+  $("#motivationMessage").textContent = motivacion.message;
+
+  const resumen = motivacion.summary || [];
+  $("#motivationSummary").innerHTML = resumen.map((dato) => `<span>${escapeHtml(dato)}</span>`).join("");
+
+  const perfil = $("#motivationProfile");
+  if (motivacion.profile_phrase) {
+    perfil.hidden = false;
+    perfil.textContent = motivacion.profile_phrase;
+    perfil.dataset.profile = motivacion.profile || "";
+  } else {
+    perfil.hidden = true;
+  }
+
+  const boton = $("#motivationAction");
+  if (motivacion.action) {
+    boton.hidden = false;
+    boton.textContent = `${motivacion.action.label} →`;
+    boton.onclick = () => goToView(motivacion.action.view);
+  } else {
+    boton.hidden = true;
+  }
+}
+
 function renderCompensation(plan) {
   if (!plan) return;
   const alertas = plan.alerts || [];
@@ -610,6 +645,7 @@ async function loadDashboard() {
     renderAchievements(data.achievements);
     renderGuideAchievements(data.achievements);
     renderWeek(data.week_activity);
+    renderMotivation(data.motivation);
     renderCompensation(data.compensation);
     updateGuideWithUser(user);
     $("#attentionContacts").innerHTML = data.recent_contacts.map(personCard).join("");

@@ -101,6 +101,18 @@
           <div class="hero-medal"><span>🏅</span><strong id="heroStreak">0</strong><small>DÍAS</small></div>
         </article>
 
+        <article class="panel motivation-card" id="motivationCard" hidden>
+          <span class="motivation-icon" id="motivationIcon">☀</span>
+          <div class="motivation-body">
+            <span class="mini-kicker" id="motivationKicker"></span>
+            <h3 id="motivationTitle"></h3>
+            <p id="motivationMessage"></p>
+            <div class="motivation-summary" id="motivationSummary"></div>
+            <blockquote class="motivation-profile" id="motivationProfile" hidden></blockquote>
+          </div>
+          <button class="light-button" id="motivationAction" type="button" hidden></button>
+        </article>
+
         <div class="section-heading compact" id="alertsHeading" hidden><div><span class="mini-kicker">PLAN DE COMPENSACIÓN</span><h2>Lo que puedes lograr este mes</h2></div><button class="text-button" data-go-view="map">Ver mi rango →</button></div>
         <div class="alert-stack" id="compensationAlerts"></div>
 
@@ -455,6 +467,7 @@
             <details><summary>¿Cómo registro a varias personas en una plática?<span>＋</span></summary><p>En <b>Mi red</b> abre <b>Captura por QR</b>, crea una sesión con el nombre del evento y proyecta el código. Cada asistente lo escanea y llena sus datos desde su celular al mismo tiempo; los registros entran solos a tu red con la etiqueta ▦. Al terminar, cierra el registro para que el enlace deje de funcionar.</p></details>
             <details><summary>¿Puedo crear mis propias misiones?<span>＋</span></summary><p>Sí. En <b>Agenda de hoy</b> usa el botón <b>＋ Nueva misión</b>: eliges el título, la categoría, el perfil, la fecha, la hora y cuántos XP vale. Con <b>✎</b> la editas y con <b>🗑</b> la eliminas.</p></details>
             <details><summary>¿Puedo corregir o borrar algo que registré mal?<span>＋</span></summary><p>Sí. Tanto en <b>Mi red</b> como en <b>Agenda de hoy</b> cada elemento tiene un botón para editar (<b>✎</b>) y otro para eliminar (<b>🗑</b>). Al eliminar te pedimos confirmación, porque no se puede deshacer.</p></details>
+            <details><summary>¿Por qué cambia el mensaje del tablero?<span>＋</span></summary><p>BRÚJULA te acompaña con un mensaje distinto <b>por la mañana, por la tarde y por la noche</b>. Cambia según lo que tengas pendiente: si traes llamadas de seguimiento te anima a empezar por ahí, si ya terminaste te lo reconoce, y por la noche te resume lo que lograste en el día. Además incluye una frase pensada para tu perfil dominante.</p></details>
             <details><summary>¿Cómo se calcula mi racha?<span>＋</span></summary><p>Son los días seguidos en que guardaste tu avance en <b>Medir avances</b>. No depende de completar misiones. Si te saltas un día completo, la cuenta vuelve a cero; mientras el día siga en curso, tu racha se mantiene aunque todavía no registres.</p></details>
             <details><summary>¿Qué diferencia hay entre pesos y puntos de volumen?<span>＋</span></summary><p>Los <b>pesos</b> son lo que facturas; los <b>puntos de volumen (VP)</b> son la unidad con la que el plan de compensación mide tu rango y tus bonos. Un mismo pedido tiene ambos valores, por eso el registro diario te pide los dos.</p></details>
             <details><summary>¿Cómo sabe BRÚJULA cuál es mi rango?<span>＋</span></summary><p>Tú se lo dices: en <b>Editar mis datos</b> eliges el rango que aparece en tu back office de Immunotec. Con ese dato la aplicación conoce tu requisito de mantenimiento mensual (180, 400 o 600 VVP) y te avisa cuánto te falta.</p></details>

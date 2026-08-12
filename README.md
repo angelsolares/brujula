@@ -63,6 +63,17 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 - Rutas de capacitación y desarrollo personal.
 - Guía interactiva con recorrido guiado, simulador de niveles, reglas de XP, manual del CRM, perfiles, plan de primera semana y preguntas frecuentes.
 
+## Frases de acompañamiento
+
+`frases.py` guarda el banco (111 frases) en cinco listas: recordatorios de actividad
+pendiente, motivación para las llamadas, frases generales, frases por perfil dominante
+y cierres del día. **Para agregar más, basta con escribirlas en la lista que corresponda**;
+no hay que tocar nada más.
+
+La aplicación elige según la hora (mañana, tarde y noche), el perfil dominante y lo que
+haya en la agenda. La elección es estable dentro de cada momento —no cambia al recargar—
+y el desplazamiento por momento garantiza que las tres frases del día sean distintas.
+
 ## Cuentas y acceso
 
 Cada persona entra con su correo y su contraseña, y **ve únicamente su propia red**:
