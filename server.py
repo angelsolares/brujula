@@ -1719,9 +1719,11 @@ class AppHandler(BaseHTTPRequestHandler):
         if not scores or not set(scores).issubset(valid):
             self.send_json({"error": "Resultados inválidos"}, HTTPStatus.BAD_REQUEST)
             return
+        # La rueda de perfiles está dibujada sobre una escala de 0 a 40.
+        limpios = {key: int(clean_number(valor, f"El puntaje de {key}", 0, 40)) for key, valor in scores.items()}
         with connect() as db:
-            for key, score in scores.items():
-                db.execute("UPDATE profile_scores SET score=? WHERE user_id=? AND profile_key=?", (int(score), self.user_id, key))
+            for key, score in limpios.items():
+                db.execute("UPDATE profile_scores SET score=? WHERE user_id=? AND profile_key=?", (score, self.user_id, key))
             winner = db.execute("SELECT label FROM profile_scores WHERE user_id=? ORDER BY score DESC LIMIT 1", (self.user_id,)).fetchone()[0]
             db.execute("UPDATE users SET dominant_profile=?, xp=xp+75 WHERE id=?", (winner, self.user_id))
         self.send_json({"ok": True, "dominant_profile": winner, "message": "Tu brújula fue actualizada +75 XP"})

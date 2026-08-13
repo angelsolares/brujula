@@ -426,7 +426,7 @@
         </section>
 
         <section class="guide-section" id="guideProfiles">
-          <div class="guide-section-head"><div><span class="mini-kicker">CONOCIMIENTO PERSONAL</span><h2>Cinco perfiles, cinco formas de avanzar</h2><p>El test no pone etiquetas. Te ayuda a elegir acciones que se sientan naturales y a usar tus fortalezas para apoyar lo que más te cuesta.</p></div><span class="section-number">04</span></div>
+          <div class="guide-section-head"><div><span class="mini-kicker">CONOCIMIENTO PERSONAL</span><h2>Cinco perfiles, cinco formas de avanzar</h2><p>El test son 25 afirmaciones y no pone etiquetas. Te ayuda a elegir acciones que se sientan naturales y a usar tus fortalezas para apoyar lo que más te cuesta.</p></div><span class="section-number">04</span></div>
           <div class="profile-guide-visual">
             <img src="/assets/profiles-compass.png" alt="Ilustración circular con los cinco perfiles de BRÚJULA">
             <div class="profile-manual-list">
@@ -592,8 +592,13 @@
 
   <dialog id="quizDialog" class="modal quiz-modal">
     <form id="quizForm" method="dialog">
-      <div class="modal-head"><div><span class="mini-kicker">TEST DE PERFIL</span><h2>¿Cómo construyes tu negocio?</h2></div><button type="button" data-close-quiz aria-label="Cerrar">×</button></div>
-      <p class="quiz-intro">Responde del 1 (nunca) al 5 (siempre). Esta versión rápida actualiza tu brújula.</p>
+      <div class="modal-head"><div><span class="mini-kicker">TEST DE PERFIL</span><h2>¿Cómo construyes tu negocio?</h2><p>Marca qué tanto te describe cada afirmación. No hay respuestas correctas ni perfiles mejores que otros.</p></div><button type="button" data-close-quiz aria-label="Cerrar">×</button></div>
+      <div class="quiz-scale">
+        <span class="soft-chip" id="quizProgress">25 afirmaciones</span>
+        <div class="quiz-scale-legend">
+          <span><b>1</b> Nunca</span><span><b>2</b> Casi nunca</span><span><b>3</b> A veces</span><span><b>4</b> Casi siempre</span><span><b>5</b> Siempre</span>
+        </div>
+      </div>
       <div id="quizQuestions" class="quiz-questions"></div>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close-quiz>Ahora no</button><button type="submit" class="primary-button">Descubrir mi perfil +75 XP</button></div>
     </form>
@@ -614,9 +619,9 @@
             <legend>Representación visual</legend>
             <p>Elige la opción que quieras ver en las ilustraciones.</p>
             <div class="gender-options">
-              <label><input type="radio" name="gender" value="female"><span><b>👩</b><strong>Mujer</strong><small>Avatar femenino</small></span></label>
-              <label><input type="radio" name="gender" value="male"><span><b>👨</b><strong>Hombre</strong><small>Avatar masculino</small></span></label>
-              <label><input type="radio" name="gender" value="neutral"><span><b>🧭</b><strong>Sin avatar</strong><small>Ilustración neutral</small></span></label>
+              <label><input type="radio" name="gender" value="female"><span><img src="/assets/profile-result-female.png" alt="Vista del avatar femenino"><strong>Mujer</strong><small>Avatar femenino</small></span></label>
+              <label><input type="radio" name="gender" value="male"><span><img src="/assets/profile-result-male.png" alt="Vista del avatar masculino"><strong>Hombre</strong><small>Avatar masculino</small></span></label>
+              <label><input type="radio" name="gender" value="neutral"><span><img src="/assets/profile-result-neutral.png" alt="Vista de la ilustración sin avatar"><strong>Sin avatar</strong><small>Ilustración neutral</small></span></label>
             </div>
           </fieldset>
           <div class="profile-two-columns">

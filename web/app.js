@@ -565,7 +565,7 @@ const tourSteps = [
   { view: "agenda", kicker: "ACCIÓN DIARIA", title: "Agenda de hoy", icon: "✓", mini: ["☎", "▶"], color: "#2878d0", soft: "#eaf5ff", text: "Las misiones transforman tu estrategia en acciones concretas. Puedes usar las sugeridas o crear las tuyas.", bullets: ["Crea misiones con “＋ Nueva misión”", "Marca la casilla al terminar", "Tú decides cuántos XP vale cada una"] },
   { view: "map", kicker: "PLANEACIÓN", title: "Mi mapa", icon: "⌁", mini: ["◎", "🏆"], color: "#f49a2f", soft: "#fff5e8", text: "El mapa convierte metas grandes en un sendero visible y muestra el porcentaje de avance de cada objetivo.", bullets: ["Compara avance contra meta", "Detecta el tramo que necesita atención", "Celebra cada estación alcanzada"] },
   { view: "measure", kicker: "RESULTADOS", title: "Medir avances", icon: "↗", mini: ["#", "$"], color: "#55a85b", soft: "#edf8ee", text: "Registra prospectos, presentaciones, clientes, asociados, ventas y productos para aprender de tus resultados.", bullets: ["Guardar el día da 15 XP", "La gráfica muestra los últimos cinco días", "Registrar a diario mejora tus decisiones"] },
-  { view: "profile", kicker: "CONOCIMIENTO PERSONAL", title: "Mi brújula", icon: "✣", mini: ["⌕", "♡"], color: "#ef5f86", soft: "#fff0f4", text: "Tu propósito y los cinco perfiles explican cómo trabajas mejor y qué estrategia aprovecha tus fortalezas.", bullets: ["El test rápido tiene diez preguntas", "Completarlo da 75 XP", "Ningún perfil es mejor que otro"] },
+  { view: "profile", kicker: "CONOCIMIENTO PERSONAL", title: "Mi brújula", icon: "✣", mini: ["⌕", "♡"], color: "#ef5f86", soft: "#fff0f4", text: "Tu propósito y los cinco perfiles explican cómo trabajas mejor y qué estrategia aprovecha tus fortalezas.", bullets: ["El test tiene 25 afirmaciones", "Completarlo da 75 XP", "Ningún perfil es mejor que otro"] },
   { view: "development", kicker: "CRECIMIENTO", title: "Desarrollo", icon: "♢", mini: ["🎧", "🌱"], color: "#d08b1d", soft: "#fff7dd", text: "Las rutas de desarrollo convierten conocimientos, hábitos y mentoría en capacidades sostenibles.", bullets: ["Elige una fortaleza para profundizar", "Trabaja un área de oportunidad", "Revisa el porcentaje de cada ruta"] },
 ];
 let tourIndex = 0;
@@ -988,6 +988,7 @@ async function submitMetrics(event) {
   });
 }
 
+// Cinco afirmaciones por perfil, intercaladas para que no se note el patrón.
 const quizStatements = [
   ["analyst", "Antes de recomendar algo, me gusta conocer cómo funciona."],
   ["executor", "Si tengo una idea, me gusta ponerla en práctica rápidamente."],
@@ -999,17 +1000,54 @@ const quizStatements = [
   ["connection", "Las personas suelen confiar en mí."],
   ["constancy", "Reviso mis avances periódicamente."],
   ["leadership", "Me emociona formar y motivar equipos."],
+  ["analyst", "Prefiero explicar el porqué antes de pedir una decisión."],
+  ["executor", "Prefiero empezar y ajustar sobre la marcha."],
+  ["connection", "Me resulta fácil iniciar una conversación con un desconocido."],
+  ["constancy", "Cumplo lo que me comprometo, aunque ese día no tenga ganas."],
+  ["leadership", "Me buscan cuando alguien necesita orientación."],
+  ["analyst", "Me tomo el tiempo de estudiar el producto a fondo."],
+  ["executor", "Me cuesta quedarme quieta cuando hay algo por hacer."],
+  ["connection", "Prefiero escuchar a la persona antes de proponerle algo."],
+  ["constancy", "Prefiero avanzar un poco todos los días que mucho de golpe."],
+  ["leadership", "Me interesa enseñar lo que voy aprendiendo."],
+  ["analyst", "Me siento más segura cuando domino el tema del que hablo."],
+  ["executor", "Me motiva ver resultados en el corto plazo."],
+  ["connection", "Recuerdo los detalles personales de la gente que trato."],
+  ["constancy", "Llevo registro de mis actividades y mis resultados."],
+  ["leadership", "Pienso en cómo hacer crecer al equipo, no solo a mí."],
 ];
 
+const quizScale = ["Nunca", "Casi nunca", "A veces", "Casi siempre", "Siempre"];
+
 function buildQuiz() {
-  $("#quizQuestions").innerHTML = quizStatements.map(([profile, statement], index) => `<div class="quiz-question"><p>${index + 1}. ${statement}</p>${[1,2,3,4,5].map((value) => `<label><input type="radio" name="q${index}" value="${value}" data-profile="${profile}" ${value === 3 ? "checked" : ""}></label>`).join("")}</div>`).join("");
+  $("#quizQuestions").innerHTML = quizStatements.map(([profile, statement], index) => `
+    <div class="quiz-question">
+      <p><b>${index + 1}.</b> ${statement}</p>
+      <div class="quiz-options">
+        ${[1, 2, 3, 4, 5].map((value) => `
+          <label title="${quizScale[value - 1]}">
+            <input type="radio" name="q${index}" value="${value}" data-profile="${profile}" ${value === 3 ? "checked" : ""}>
+            <span>${value}</span>
+          </label>`).join("")}
+      </div>
+    </div>`).join("");
+  $("#quizProgress").textContent = `${quizStatements.length} afirmaciones`;
 }
 
 async function submitQuiz(event) {
   event.preventDefault();
   const scores = { analyst: 0, executor: 0, connection: 0, constancy: 0, leadership: 0 };
-  quizStatements.forEach(([profile], index) => { scores[profile] += Number($(`input[name="q${index}"]:checked`).value); });
-  Object.keys(scores).forEach((key) => scores[key] *= 4);
+  const preguntasPorPerfil = {};
+  quizStatements.forEach(([profile], index) => {
+    scores[profile] += Number($(`input[name="q${index}"]:checked`).value);
+    preguntasPorPerfil[profile] = (preguntasPorPerfil[profile] || 0) + 1;
+  });
+  // Se normaliza a la escala de 0 a 40 de la rueda, sin importar cuántas
+  // afirmaciones tenga cada perfil: así se pueden agregar más sin romper nada.
+  Object.keys(scores).forEach((key) => {
+    const maximo = (preguntasPorPerfil[key] || 1) * 5;
+    scores[key] = Math.round((scores[key] / maximo) * 40);
+  });
   try {
     const result = await api("/api/profile/scores", { method: "POST", body: JSON.stringify({ scores }) });
     $("#quizDialog").close();
