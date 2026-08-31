@@ -139,9 +139,10 @@ function avatarMustache(style, cx, cy, r, w, base) {
   return `<path d="M ${(cx - w * 0.42).toFixed(2)} ${(mouthY - r * 0.2).toFixed(2)} Q ${cx} ${(mouthY + r * 0.02).toFixed(2)} ${(cx + w * 0.42).toFixed(2)} ${(mouthY - r * 0.2).toFixed(2)} Q ${cx} ${(mouthY - r * 0.3).toFixed(2)} ${(cx - w * 0.42).toFixed(2)} ${(mouthY - r * 0.2).toFixed(2)} Z" fill="${base}"/>`;
 }
 
-// Devuelve el SVG completo. `mode` es "cuerpo" (figura entera) o "retrato"
-// (mismo dibujo, recortado a la cabeza para los espacios chicos).
-function avatarSvg(source, mode = "cuerpo") {
+// Devuelve el trazo y su viewBox por separado, para poder anidar el avatar
+// dentro de otro SVG (la brújula lo mete en su centro) sin recortar cadenas.
+// `mode` es "cuerpo" (figura entera) o "retrato" (recortado a la cabeza).
+function avatarShape(source, mode = "cuerpo") {
   const t = avatarTraits(source);
   const alto = AVATAR_HEIGHTS[t.height];
   const cuerpo = AVATAR_BUILDS[t.build];
@@ -201,5 +202,10 @@ function avatarSvg(source, mode = "cuerpo") {
   const viewBox = mode === "retrato"
     ? `${(cx - r * 1.75).toFixed(2)} ${(headCy - r * 1.9).toFixed(2)} ${(r * 3.5).toFixed(2)} ${(r * 3.5).toFixed(2)}`
     : "0 0 120 220";
-  return `<svg class="avatar-svg avatar-svg-${mode}" viewBox="${viewBox}" role="img" aria-label="Mi avatar" focusable="false">${dibujo}</svg>`;
+  return { viewBox, body: dibujo };
+}
+
+function avatarSvg(source, mode = "cuerpo") {
+  const { viewBox, body } = avatarShape(source, mode);
+  return `<svg class="avatar-svg avatar-svg-${mode}" viewBox="${viewBox}" role="img" aria-label="Mi avatar" focusable="false">${body}</svg>`;
 }

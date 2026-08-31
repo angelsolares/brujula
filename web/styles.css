@@ -515,3 +515,11 @@ button:disabled { opacity:.6; cursor:not-allowed; }
 .avatar-swatch input:checked + span { box-shadow:0 0 0 2px var(--purple); }
 .avatar-swatch input:focus-visible + span { box-shadow:0 0 0 2px var(--purple),0 0 0 5px color-mix(in srgb,var(--purple) 25%,transparent); }
 #avatarRandom { margin-top:14px; }
+
+/* Brújula con datos reales: la rueda, el polígono y los números se dibujan
+   desde profile_scores, así que el panel ya no depende de una ilustración. */
+.profile-compass { display:block; }
+.compass-svg { display:block; width:100%; height:auto; max-width:420px; margin:0 auto; }
+.compass-name { font-size:13px; font-weight:900; letter-spacing:.02em; }
+.compass-score { font-size:24px; font-weight:950; }
+.compass-tick { fill:#a49dbd; font-size:10px; font-weight:800; }

@@ -28,11 +28,12 @@ const profileMeta = {
 const categoryIcons = { Llamada: "☎", Contenido: "▶", Mentoría: "♢", Redes: "◎", Capacitación: "⌕", Organización: "✓" };
 const typeColors = { Prospecto: "#7755c7", Cliente: "#ed5f86", Asociado: "#2878d0" };
 const visualVariants = {
-  // La versión femenina se recorta para quitar el recuadro con barras de ejemplo;
-  // el original con ese recuadro sigue en profile-result.png.
-  female: { hero: "/assets/mission-trail.png", profile: "/assets/profile-result-female.png", label: "avatar femenino" },
-  male: { hero: "/assets/mission-trail-male.png", profile: "/assets/profile-result-male.png", label: "avatar masculino" },
-  neutral: { hero: "/assets/mission-trail-neutral.png", profile: "/assets/profile-result-neutral.png", label: "ilustración neutral sin avatar" },
+  // Las ilustraciones de personaje son limpias a propósito: las anteriores traían
+  // la rueda con puntajes pintados encima (23, 21, 31...) iguales para todos, y
+  // esos números ahora se dibujan con los datos reales en compass.js.
+  female: { hero: "/assets/mission-trail.png", profile: "/assets/character-female.png", label: "avatar femenino" },
+  male: { hero: "/assets/mission-trail-male.png", profile: "/assets/character-male.png", label: "avatar masculino" },
+  neutral: { hero: "/assets/mission-trail-neutral.png", profile: "/assets/mission-trail-neutral.png", label: "ilustración neutral sin avatar" },
 };
 const greeting = () => {
   const hour = new Date().getHours();
@@ -186,7 +187,7 @@ function selectedVisual(gender) {
 function updateProfilePreview(gender) {
   const visual = selectedVisual(gender);
   $("#profileEditPreview").src = visual.profile;
-  $("#profileEditPreview").alt = `Vista previa de la brújula con ${visual.label}`;
+  $("#profileEditPreview").alt = `Vista previa de la representación visual: ${visual.label}`;
 }
 
 function applyVisualVariant(gender) {
@@ -195,8 +196,6 @@ function applyVisualVariant(gender) {
   $("#dashboardHero").style.backgroundImage = `url("${visual.hero}")`;
   $("#journeyImage").src = visual.hero;
   $("#journeyImage").alt = `Valle ilustrado con camino de metas y ${visual.label}`;
-  $("#profileResultImage").src = visual.profile;
-  $("#profileResultImage").alt = `Resultado visual de los cinco perfiles con ${visual.label}`;
   updateProfilePreview(gender);
 }
 
@@ -272,6 +271,17 @@ function openProfileDialog() {
   if (!state.dashboard?.user) return toast("Espera un momento mientras cargamos tu perfil.");
   fillProfileForm(state.dashboard.user);
   $("#profileDialog").showModal();
+}
+
+// La brújula y el encabezado de la combinación se arman con los puntajes
+// guardados: antes venían pintados en la imagen e iguales para todos.
+function renderCompass(profiles, user) {
+  const host = $("#profileCompass");
+  if (!host || !profiles?.length) return;
+  host.innerHTML = compassSvg(profiles, user);
+  const orden = [...profiles].sort((a, b) => b.score - a.score);
+  $("#profileCombination").textContent = `${orden[0].label} + ${orden[1].label}`;
+  $("#profileCombinationFocus").textContent = profileMeta[orden[0].label]?.focus || "";
 }
 
 function renderProfileBars(target, profiles, large = false) {
@@ -694,6 +704,7 @@ async function loadDashboard() {
     $("#salesPercent").textContent = `${percent(data.sales_month, salesGoal?.target || 35000)}%`;
     renderProfileBars("#dashboardProfileBars", profiles);
     renderProfileBars("#largeProfileBars", profiles, true);
+    renderCompass(profiles, user);
     renderTasks(data.tasks);
     renderGoals(goals);
     renderDevelopment(data.development);

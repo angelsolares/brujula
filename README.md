@@ -57,7 +57,9 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 - Respaldo descargable en JSON desde la guía interactiva.
 - Mapa de crecimiento con metas SMART.
 - Registro de indicadores y ventas diarias.
-- Brújula de cinco perfiles con test rápido interactivo.
+- Brújula de cinco perfiles con test rápido interactivo. La rueda, el polígono y los
+  números se dibujan con los puntajes guardados (`web/compass.js`): no hay ilustraciones
+  con datos de ejemplo pintados encima.
 - Avatar propio: género, tono de piel, cara, corte y color de cabello, barba, estatura,
   complexión, ropa y lentes. Se dibuja como vector en el navegador (`web/avatar.js`), así
   que no hay imágenes que mantener y las combinaciones no se agotan.
