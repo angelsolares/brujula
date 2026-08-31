@@ -1,0 +1,21 @@
+# Blueprint de Render: deja el servicio descrito aquí, para no volver a
+# configurarlo a mano en el panel. Los dos secretos de Turso van con
+# sync:false, así que se capturan una sola vez en Render y nunca viajan
+# en el repositorio.
+services:
+  - type: web
+    name: brujula-crm
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false

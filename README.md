@@ -181,10 +181,14 @@ git push -u origin main
 
 ### 4. Desplegar en Render (gratis)
 
-1. En [render.com](https://render.com), crear un **Web Service** nuevo apuntando al repositorio de GitHub.
-2. Build command: `pip install -r requirements.txt`
-3. Start command: `python server.py`
-4. Variables de entorno: agregar `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` con los valores del paso 1.
-5. Render inyecta `PORT` automáticamente; el servidor ya lo respeta.
+El repositorio incluye `render.yaml`, que ya describe el servicio (build, arranque,
+health check y auto-deploy). En [render.com](https://render.com) basta con:
+
+1. **New > Blueprint**, apuntando a este repositorio: Render lee `render.yaml` y arma el servicio solo.
+2. Capturar ahí `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` con los valores del paso 1; van marcados como
+   secretos (`sync: false`), así que se piden una vez y nunca viajan en el repositorio.
+
+Hecho eso, **cada `git push` a `main` despliega solo**: no hay que volver a tocar el panel.
+Render inyecta `PORT` automáticamente; el servidor ya lo respeta.
 
 El plan gratis de Render "duerme" el servicio tras ~15 minutos sin tráfico; el primer request tras dormir tarda unos segundos en responder.
