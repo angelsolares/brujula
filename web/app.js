@@ -25,6 +25,63 @@ const profileMeta = {
   Ejecutor: { icon: "/assets/icon-executor.png", hint: "Convertir ideas en acción", focus: "Tu perfil ejecutor avanza cuando conviertes cada idea en una acción con fecha." },
   Constancia: { icon: "/assets/icon-connection.png", hint: "Sostener el ritmo día a día", focus: "Tu constancia se nota cuando revisas tu plan a la misma hora todos los días." },
 };
+// Las diez combinaciones posibles de los dos perfiles más altos. La llave son
+// las dos claves ordenadas alfabéticamente, para que dé igual cuál quedó primero.
+// Los nombres no llevan género a propósito: el texto anterior decía "Inspiradora"
+// y le quedaba mal a media red.
+const profileCombinations = {
+  "connection|leadership": {
+    name: "Voz que inspira",
+    focus: "Tu ventaja está en crear una visión atractiva, escuchar con empatía y acompañar a cada persona para que desarrolle su potencial.",
+    tags: ["Motiva con el ejemplo", "Genera confianza", "Forma nuevos líderes"],
+  },
+  "executor|leadership": {
+    name: "Motor del equipo",
+    focus: "Marcas el rumbo y además lo echas a andar: propones la meta, tomas la iniciativa y el equipo ve avances desde la primera semana.",
+    tags: ["Arranca sin esperar", "Contagia impulso", "Convierte metas en tareas"],
+  },
+  "analyst|leadership": {
+    name: "Criterio que guía",
+    focus: "Inspiras con argumentos: explicas el porqué de cada decisión, y la gente te sigue porque entiende, no solo porque confía.",
+    tags: ["Explica el porqué", "Decide con datos", "Enseña a pensar"],
+  },
+  "constancy|leadership": {
+    name: "Ejemplo sostenido",
+    focus: "Tu fuerza no está en un arranque sino en sostener el paso: el equipo se ordena porque te ve cumplir lo que prometes, mes tras mes.",
+    tags: ["Cumple lo que dice", "Da seguimiento", "Sostiene el ritmo"],
+  },
+  "connection|executor": {
+    name: "Puente que avanza",
+    focus: "Abres puertas y no las dejas enfriar: creas confianza rápido y conviertes esa conversación en un siguiente paso con fecha.",
+    tags: ["Rompe el hielo", "Cierra con acuerdos", "No deja enfriar"],
+  },
+  "analyst|connection": {
+    name: "Escucha que orienta",
+    focus: "Preguntas antes de proponer. Entiendes la necesidad real de cada persona y por eso tu recomendación casi siempre da en el blanco.",
+    tags: ["Pregunta primero", "Recomienda a la medida", "Explica con claridad"],
+  },
+  "connection|constancy": {
+    name: "Presencia confiable",
+    focus: "La gente sabe que vas a estar ahí. Tu seguimiento cercano y puntual es lo que convierte un contacto en una relación de años.",
+    tags: ["Seguimiento cercano", "Construye a largo plazo", "Nadie se queda sin respuesta"],
+  },
+  "analyst|executor": {
+    name: "Decisión con datos",
+    focus: "Actúas rápido pero no a ciegas: revisas el número, decides y ajustas. Pruebas más ideas que nadie porque mides cada una.",
+    tags: ["Prueba y mide", "Corrige a tiempo", "Actúa sin trabarse"],
+  },
+  "constancy|executor": {
+    name: "Ritmo que cumple",
+    focus: "Combinas velocidad con disciplina: lo que entra a tu plan sale hecho, y por eso tus resultados no dependen de la inspiración del día.",
+    tags: ["Termina lo que empieza", "Trabaja con plan", "Resultados parejos"],
+  },
+  "analyst|constancy": {
+    name: "Método claro",
+    focus: "Ordenas lo complejo y lo repites bien: dejas procesos que otros pueden seguir, y eso es lo que hace que un negocio crezca sin ti encima.",
+    tags: ["Documenta lo que funciona", "Mejora poco a poco", "Deja procesos claros"],
+  },
+};
+
 const categoryIcons = { Llamada: "☎", Contenido: "▶", Mentoría: "♢", Redes: "◎", Capacitación: "⌕", Organización: "✓" };
 const typeColors = { Prospecto: "#7755c7", Cliente: "#ed5f86", Asociado: "#2878d0" };
 const visualVariants = {
@@ -280,8 +337,13 @@ function renderCompass(profiles, user) {
   if (!host || !profiles?.length) return;
   host.innerHTML = compassSvg(profiles, user);
   const orden = [...profiles].sort((a, b) => b.score - a.score);
-  $("#profileCombination").textContent = `${orden[0].label} + ${orden[1].label}`;
-  $("#profileCombinationFocus").textContent = profileMeta[orden[0].label]?.focus || "";
+  const combinacion = profileCombinations[[orden[0].profile_key, orden[1].profile_key].sort().join("|")];
+  $("#profileCombination").textContent = combinacion
+    ? `${orden[0].label} + ${orden[1].label} = ${combinacion.name}`
+    : `${orden[0].label} + ${orden[1].label}`;
+  $("#profileCombinationFocus").textContent = combinacion?.focus || profileMeta[orden[0].label]?.focus || "";
+  $("#profileCombinationTags").innerHTML = (combinacion?.tags || [])
+    .map((etiqueta) => `<span>${escapeHtml(etiqueta)}</span>`).join("");
 }
 
 function renderProfileBars(target, profiles, large = false) {
