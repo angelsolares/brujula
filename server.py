@@ -560,6 +560,7 @@ def create_account(email: str, name: str, gender: str = "neutral", role: str = "
     name = clean_text(name, 120, "El nombre", required=True)
     role = clean_choice(role, VALID_ROLES, "El rol", "admin")
     gender = clean_choice(gender, VALID_GENDERS, "El género", "neutral")
+    elegida = bool(password)
     password = password or generate_password()
     with connect() as db:
         if fetch_one(db, "SELECT id FROM accounts WHERE email=?", (email,)):
@@ -571,27 +572,29 @@ def create_account(email: str, name: str, gender: str = "neutral", role: str = "
         )
         user_id = cursor.lastrowid
         db.execute(
-            "INSERT INTO accounts (user_id,name,email,password_hash,role) VALUES (?,?,?,?,?)",
-            (user_id, name, email, hash_password(password), role),
+            "INSERT INTO accounts (user_id,name,email,password_hash,role,must_change_password) VALUES (?,?,?,?,?,?)",
+            (user_id, name, email, hash_password(password), role, 0 if elegida else 1),
         )
         seed_user_catalogs(db, user_id)
-    return {"email": email, "name": name, "role": role, "user_id": user_id, "password": password}
+    return {"email": email, "name": name, "role": role, "user_id": user_id,
+            "password": password, "must_change": not elegida}
 
 
 def reset_account_password(email: str, password: str | None = None) -> dict:
     """Asigna una contraseña nueva y cierra las sesiones abiertas de esa cuenta."""
     email = clean_email(email, "El correo").lower()
+    elegida = bool(password)
     password = password or generate_password()
     with connect() as db:
         cuenta = fetch_one(db, "SELECT id,name,email,role FROM accounts WHERE email=?", (email,))
         if not cuenta:
             raise ValueError(f"No hay ninguna cuenta con el correo {email}")
-        db.execute("UPDATE accounts SET password_hash=?, must_change_password=1 WHERE id=?",
-                   (hash_password(password), cuenta["id"]))
+        db.execute("UPDATE accounts SET password_hash=?, must_change_password=? WHERE id=?",
+                   (hash_password(password), 0 if elegida else 1, cuenta["id"]))
         # Quien tuviera la sesión abierta con la contraseña anterior queda fuera.
         cerradas = db.execute("SELECT COUNT(*) FROM sessions WHERE account_id=?", (cuenta["id"],)).fetchone()[0]
         db.execute("DELETE FROM sessions WHERE account_id=?", (cuenta["id"],))
-    return {**cuenta, "password": password, "closed_sessions": cerradas}
+    return {**cuenta, "password": password, "closed_sessions": cerradas, "must_change": not elegida}
 
 
 def initialize_database() -> None:
@@ -1798,6 +1801,9 @@ def main() -> None:
     parser.add_argument("--role", default="admin", choices=sorted(VALID_ROLES))
     parser.add_argument("--reset-password", metavar="CORREO",
                         help="Genera una contraseña nueva para una cuenta existente y cierra sus sesiones")
+    parser.add_argument("--password", metavar="CLAVE",
+                        help="Fija esta contraseña en vez de sortear una y la deja como definitiva; "
+                             "acompaña a --add-account o a --reset-password")
     parser.add_argument("--list-accounts", action="store_true")
     args = parser.parse_args()
     global APP_VERSION
@@ -1806,24 +1812,32 @@ def main() -> None:
     if args.add_account:
         correo, nombre = args.add_account
         try:
-            cuenta = create_account(correo, nombre, gender=args.gender, role=args.role)
+            cuenta = create_account(correo, nombre, gender=args.gender, role=args.role,
+                                    password=args.password)
         except ValueError as error:
             print(f"\n  No se pudo crear la cuenta: {error}\n")
             raise SystemExit(1)
         print(f"\n  Cuenta creada: {cuenta['name']} <{cuenta['email']}>  ({cuenta['role']})")
+        if not cuenta["must_change"]:
+            print(f"  Contraseña fija: {cuenta['password']}")
+            print("  Queda como definitiva: no se le pedirá cambiarla al entrar.\n")
+            return
         print(f"  Contraseña temporal: {cuenta['password']}")
         print("  Guárdala ahora: no se vuelve a mostrar, en la base solo queda su hash.\n")
         return
     if args.reset_password:
         try:
-            cuenta = reset_account_password(args.reset_password)
+            cuenta = reset_account_password(args.reset_password, password=args.password)
         except ValueError as error:
             print(f"\n  No se pudo reiniciar: {error}")
             print("  Revisa los correos dados de alta con --list-accounts\n")
             raise SystemExit(1)
         print(f"\n  Contraseña reiniciada: {cuenta['name']} <{cuenta['email']}>")
-        print(f"  Contraseña temporal nueva: {cuenta['password']}")
+        print(f"  Contraseña nueva: {cuenta['password']}")
         print(f"  Sesiones cerradas: {cuenta['closed_sessions']}")
+        if not cuenta["must_change"]:
+            print("  Queda como definitiva: no se le pedirá cambiarla al entrar.\n")
+            return
         print("  Guárdala ahora: no se vuelve a mostrar. Se le pedirá cambiarla al entrar.\n")
         return
     if args.list_accounts:

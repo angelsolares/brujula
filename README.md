@@ -88,6 +88,14 @@ python server.py --list-accounts
 solo queda su hash (PBKDF2-SHA256, 260 000 iteraciones). Nunca se guardan contraseñas en
 el repositorio. Quien entra con una contraseña temporal recibe el aviso para cambiarla.
 
+Para la cuenta de demostración, que se presta y se dicta, conviene una contraseña fija:
+`--password` la deja tal cual y sin el aviso de cambiarla, tanto al crear la cuenta como
+al reiniciarla. Úsalo solo para esa cuenta de prueba, nunca para una cuenta real.
+
+```bash
+python server.py --reset-password prueba@brujula.mx --password "una-clave-fija"
+```
+
 Detalles de la protección:
 
 - Sesión en cookie `HttpOnly` con `SameSite=Lax`, y `Secure` cuando se sirve por HTTPS.
