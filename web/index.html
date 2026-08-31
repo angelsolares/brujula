@@ -60,7 +60,7 @@
       </div>
       <div class="account-box">
         <button class="profile-mini" id="openAccountProfile" type="button" aria-label="Abrir y editar mi perfil">
-          <div class="avatar">MT</div>
+          <div class="avatar" id="sideAvatar">MT</div>
           <div><strong id="sideUserName">Exploradora</strong><span id="sideUserLevel">Nivel 1</span></div>
           <span class="profile-chevron">›</span>
         </button>
@@ -609,9 +609,10 @@
       <div class="modal-head"><div><span class="mini-kicker">MI IDENTIDAD EN BRÚJULA</span><h2>Editar mi perfil</h2><p>Personaliza tus datos, tu meta y la forma en que te representa la experiencia.</p></div><button type="button" data-close-profile aria-label="Cerrar">×</button></div>
       <div class="profile-editor-layout">
         <aside class="profile-preview-card">
-          <img id="profileEditPreview" src="/assets/profile-result.png" alt="Vista previa de la experiencia visual seleccionada">
+          <div class="avatar-stage" id="profileAvatarStage"></div>
           <div><small>VISTA PREVIA</small><strong id="profilePreviewName">Tu nombre</strong><span id="profileDominantReadout">Perfil dominante</span></div>
-          <p>Las ilustraciones del tablero, tu mapa y tu brújula cambian automáticamente.</p>
+          <img id="profileEditPreview" class="profile-scene-thumb" src="/assets/profile-result.png" alt="Vista previa de la ilustración de fondo">
+          <p>Tu avatar acompaña tu nombre en el menú y en tu perfil. La ilustración grande del tablero cambia con la representación visual.</p>
         </aside>
         <div class="profile-fields">
           <label class="profile-field"><span>Nombre completo *</span><input name="name" required maxlength="120" autocomplete="name" placeholder="¿Cómo quieres que te llamemos?"></label>
@@ -623,6 +624,12 @@
               <label><input type="radio" name="gender" value="male"><span><img src="/assets/profile-result-male.png" alt="Vista del avatar masculino"><strong>Hombre</strong><small>Avatar masculino</small></span></label>
               <label><input type="radio" name="gender" value="neutral"><span><img src="/assets/profile-result-neutral.png" alt="Vista de la ilustración sin avatar"><strong>Sin avatar</strong><small>Ilustración neutral</small></span></label>
             </div>
+          </fieldset>
+          <fieldset class="avatar-fieldset">
+            <legend>Mi avatar</legend>
+            <p>Arma una figura que se parezca a ti. Cambia al momento y se guarda con tu perfil.</p>
+            <div class="avatar-controls" id="avatarControls"></div>
+            <button type="button" class="ghost-button" id="avatarRandom">Sorpréndeme</button>
           </fieldset>
           <div class="profile-two-columns">
             <label class="profile-field"><span>Correo</span><input name="email" type="email" maxlength="160" autocomplete="email" placeholder="nombre@correo.com"></label>
@@ -659,6 +666,7 @@
     </div>
   </dialog>
 
+  <script src="/avatar.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>

@@ -489,3 +489,29 @@ button:disabled { opacity:.6; cursor:not-allowed; }
   .gender-options { grid-template-columns:1fr; }.gender-options label > span { min-height:58px; }.profile-two-columns { grid-template-columns:1fr; }.profile-preview-card { display:block; }.profile-preview-card img { width:100%; }.profile-page-actions { flex-direction:column; }.profile-page-actions button { width:100%; }
 }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior:auto!important; animation:none!important; transition:none!important; } }
+
+/* Avatar vectorial: el mismo SVG sirve de retrato chico en el menú y de figura
+   completa en el editor de perfil, así que solo cambia la caja que lo contiene. */
+.avatar-svg { display:block; width:100%; height:100%; }
+.avatar#sideAvatar { overflow:hidden; padding:0; background:linear-gradient(150deg,#efe9ff,#ffd9e5); }
+.avatar-stage { display:grid; place-items:center; padding:10px; border-radius:13px; background:linear-gradient(160deg,#f4f0ff,#ffe6ee); }
+.avatar-stage .avatar-svg { width:auto; height:186px; filter:drop-shadow(0 6px 10px rgba(25,20,60,.18)); }
+.profile-preview-card .profile-scene-thumb { margin-top:4px; aspect-ratio:16/10; }
+
+.avatar-fieldset { padding:17px; border:1px solid #e8e4f6; border-radius:16px; }
+.avatar-fieldset legend { padding:0 7px; color:var(--purple); font-size:9px; letter-spacing:.09em; font-weight:850; text-transform:uppercase; }
+.avatar-fieldset > p { margin:0 0 14px; color:var(--muted); font-size:9px; }
+.avatar-controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr)); gap:13px; }
+.avatar-control { display:block; margin:0; padding:0; border:0; }
+.avatar-control > span,.avatar-control legend { display:block; margin-bottom:6px; padding:0; color:var(--muted); font-size:8px; letter-spacing:.08em; font-weight:850; text-transform:uppercase; }
+.avatar-control select { width:100%; padding:9px 10px; border:1px solid #e2ddf3; border-radius:10px; background:#fafafe; color:var(--ink); font:inherit; font-size:11px; }
+.avatar-control select:focus-visible { outline:2px solid var(--purple); outline-offset:1px; }
+.avatar-swatches { display:flex; flex-wrap:wrap; gap:7px; }
+.avatar-swatch { position:relative; cursor:pointer; }
+.avatar-swatch input { position:absolute; width:1px; height:1px; opacity:0; }
+.avatar-swatch span { display:block; width:25px; height:25px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px #ded8f0; }
+.avatar-swatch i { position:absolute; left:50%; bottom:calc(100% + 5px); transform:translateX(-50%); padding:4px 7px; border-radius:6px; background:var(--navy-900,#191f48); color:#fff; font-size:8px; font-style:normal; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .12s; }
+.avatar-swatch:hover i { opacity:1; }
+.avatar-swatch input:checked + span { box-shadow:0 0 0 2px var(--purple); }
+.avatar-swatch input:focus-visible + span { box-shadow:0 0 0 2px var(--purple),0 0 0 5px color-mix(in srgb,var(--purple) 25%,transparent); }
+#avatarRandom { margin-top:14px; }

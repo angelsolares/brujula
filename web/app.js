@@ -200,6 +200,60 @@ function applyVisualVariant(gender) {
   updateProfilePreview(gender);
 }
 
+// Los tres rasgos de color se eligen con muestras; el resto con listas, que a
+// nueve rasgos es lo que cabe sin volver el formulario un muro de botones.
+const AVATAR_SWATCHES = { skin: AVATAR_SKIN, hair_color: AVATAR_HAIR_COLOR, outfit: AVATAR_OUTFIT };
+
+function renderAvatarControls() {
+  const host = $("#avatarControls");
+  if (!host || host.dataset.ready) return;
+  host.innerHTML = Object.entries(AVATAR_OPTIONS).map(([key, { label, choices }]) => {
+    const paleta = AVATAR_SWATCHES[key];
+    if (paleta) {
+      const muestras = choices.map(([value, texto]) =>
+        `<label class="avatar-swatch"><input type="radio" name="avatar_${key}" value="${value}"><span style="background:${paleta[value][0]}"></span><i>${texto}</i></label>`).join("");
+      return `<fieldset class="avatar-control avatar-control-colors"><legend>${label}</legend><div class="avatar-swatches">${muestras}</div></fieldset>`;
+    }
+    const opciones = choices.map(([value, texto]) => `<option value="${value}">${texto}</option>`).join("");
+    return `<label class="avatar-control"><span>${label}</span><select name="avatar_${key}">${opciones}</select></label>`;
+  }).join("");
+  host.dataset.ready = "1";
+}
+
+function avatarFormTraits() {
+  const form = $("#profileForm");
+  const traits = {};
+  Object.keys(AVATAR_OPTIONS).forEach((key) => {
+    const control = form.elements[`avatar_${key}`];
+    if (control) traits[`avatar_${key}`] = control.value;
+  });
+  return traits;
+}
+
+function refreshAvatarPreview() {
+  const stage = $("#profileAvatarStage");
+  if (stage) stage.innerHTML = avatarSvg(avatarFormTraits(), "cuerpo");
+}
+
+function setAvatarForm(user) {
+  const form = $("#profileForm");
+  renderAvatarControls();
+  Object.entries(avatarTraits(user)).forEach(([key, value]) => {
+    const control = form.elements[`avatar_${key}`];
+    if (control) control.value = value;
+  });
+  refreshAvatarPreview();
+}
+
+function randomizeAvatar() {
+  const form = $("#profileForm");
+  Object.entries(AVATAR_OPTIONS).forEach(([key, { choices }]) => {
+    const control = form.elements[`avatar_${key}`];
+    if (control) control.value = choices[Math.floor(Math.random() * choices.length)][0];
+  });
+  refreshAvatarPreview();
+}
+
 function fillProfileForm(user) {
   const form = $("#profileForm");
   ["name", "email", "phone", "city", "purpose", "target_income", "goal_date", "rank"].forEach((key) => {
@@ -211,6 +265,7 @@ function fillProfileForm(user) {
   $("#profilePreviewName").textContent = user.name;
   $("#profileDominantReadout").textContent = `${user.dominant_profile} · Nivel ${user.level}`;
   updateProfilePreview(gender);
+  setAvatarForm(user);
 }
 
 function openProfileDialog() {
@@ -604,7 +659,7 @@ async function loadDashboard() {
     const firstName = user.name.trim().split(/\s+/)[0] || "Exploradora";
     viewTitles.dashboard = `¡${greeting()}, ${firstName}!`;
     if ($("#view-dashboard").classList.contains("active")) $("#viewTitle").textContent = viewTitles.dashboard;
-    $(".avatar").textContent = initials(user.name);
+    $("#sideAvatar").innerHTML = avatarSvg(user, "retrato");
     $("#sideUserName").textContent = user.name;
     $("#sideUserLevel").textContent = `Nivel ${user.level} · ${user.dominant_profile}`;
     $("#sideStreak").textContent = `${user.streak} días`;
@@ -1102,6 +1157,8 @@ function bindEvents() {
   $$('[data-close-profile]').forEach((button) => button.addEventListener("click", () => $("#profileDialog").close()));
   $("#profileForm").addEventListener("submit", submitProfile);
   $$('#profileForm [name="gender"]').forEach((input) => input.addEventListener("change", (event) => updateProfilePreview(event.target.value)));
+  $("#avatarControls").addEventListener("change", refreshAvatarPreview);
+  $("#avatarRandom").addEventListener("click", randomizeAvatar);
   $('#profileForm [name="name"]').addEventListener("input", (event) => { $("#profilePreviewName").textContent = event.target.value.trim() || "Tu nombre"; });
   $$('[data-guide-section]').forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.guideSection).scrollIntoView({ behavior: "smooth", block: "start" })));
   $("#xpSimulator").addEventListener("input", (event) => updateXpSimulator(event.target.value));

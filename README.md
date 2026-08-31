@@ -58,6 +58,9 @@ No requiere instalar paquetes. Usa únicamente Python y SQLite, que forma parte 
 - Mapa de crecimiento con metas SMART.
 - Registro de indicadores y ventas diarias.
 - Brújula de cinco perfiles con test rápido interactivo.
+- Avatar propio: género, tono de piel, cara, corte y color de cabello, barba, estatura,
+  complexión, ropa y lentes. Se dibuja como vector en el navegador (`web/avatar.js`), así
+  que no hay imágenes que mantener y las combinaciones no se agotan.
 - Perfil personal editable con nombre, contacto, ciudad, propósito, meta mensual y fecha objetivo.
 - Representación visual femenina, masculina o neutral que adapta las ilustraciones del tablero, mapa y brújula.
 - Rutas de capacitación y desarrollo personal.

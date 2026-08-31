@@ -97,6 +97,21 @@ def day_offset(days: int) -> str:
 VALID_KINDS = {"Prospecto", "Cliente", "Asociado"}
 VALID_INTEREST = {"Alto", "Medio", "Bajo"}
 VALID_GENDERS = {"female", "male", "neutral"}
+
+# Rasgos del avatar: por cada uno, sus opciones válidas y con cuál nace la cuenta.
+# El dibujo vive en web/avatar.js; aquí solo se valida y se guarda lo elegido, así
+# que agregar una opción nueva es tocar esta tabla y el dibujo, nada más.
+AVATAR_TRAITS = {
+    "skin": (("clara", "morena_clara", "morena", "morena_oscura", "oscura"), "morena"),
+    "face": (("ovalada", "redonda", "cuadrada", "corazon"), "ovalada"),
+    "hair": (("rapado", "corto", "medio", "largo", "rizado", "chongo", "trenzas"), "corto"),
+    "hair_color": (("negro", "castano", "rubio", "rojizo", "canoso"), "negro"),
+    "facial_hair": (("ninguna", "bigote", "candado", "barba"), "ninguna"),
+    "height": (("baja", "media", "alta"), "media"),
+    "build": (("delgada", "media", "robusta"), "media"),
+    "outfit": (("morado", "rosa", "azul", "verde", "arena"), "morado"),
+    "glasses": (("no", "si"), "no"),
+}
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_PATTERN = re.compile(r"^\d{2}:\d{2}$")
@@ -608,6 +623,8 @@ def initialize_database() -> None:
         ensure_column(db, "users", "phone", "TEXT NOT NULL DEFAULT ''")
         ensure_column(db, "users", "city", "TEXT NOT NULL DEFAULT ''")
         ensure_column(db, "users", "rank", "TEXT NOT NULL DEFAULT 'Empresario'")
+        for rasgo, (_opciones, inicial) in AVATAR_TRAITS.items():
+            ensure_column(db, "users", f"avatar_{rasgo}", f"TEXT NOT NULL DEFAULT '{inicial}'")
         ensure_column(db, "daily_metrics", "volume_points", "REAL NOT NULL DEFAULT 0")
         ensure_column(db, "daily_metrics", "client_orders", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(db, "contacts", "volume_points", "REAL NOT NULL DEFAULT 0")
@@ -1744,11 +1761,16 @@ class AppHandler(BaseHTTPRequestHandler):
             clean_date(data.get("goal_date"), "La fecha objetivo"),
             clean_choice(data.get("rank"), set(RANK_KEYS), "El rango", "Empresario"),
         )
+        rasgos = tuple(
+            clean_choice(data.get(f"avatar_{rasgo}"), set(opciones), f"El rasgo «{rasgo}» del avatar", inicial)
+            for rasgo, (opciones, inicial) in AVATAR_TRAITS.items()
+        )
+        columnas_avatar = ",".join(f"avatar_{rasgo}=?" for rasgo in AVATAR_TRAITS)
         with connect() as db:
             db.execute(
-                """UPDATE users SET name=?,gender=?,email=?,phone=?,city=?,
-                purpose=?,target_income=?,goal_date=?,rank=? WHERE id=?""",
-                values + (self.user_id,),
+                f"""UPDATE users SET name=?,gender=?,email=?,phone=?,city=?,
+                purpose=?,target_income=?,goal_date=?,rank=?,{columnas_avatar} WHERE id=?""",
+                values + rasgos + (self.user_id,),
             )
             user = fetch_one(db, "SELECT * FROM users WHERE id=?", (self.user_id,))
         user["level"] = user["xp"] // 250 + 1
