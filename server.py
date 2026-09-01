@@ -1093,10 +1093,30 @@ def daily_motivation(db, user_id: int, user: dict, tasks: list, metrics: dict) -
             "action": {"label": "Crear una misión", "view": "agenda"}}
 
 
+# Orden de los cinco perfiles. Manda el puntaje; cuando dos empatan, gana el que
+# se haya trabajado con más contactos distintos y, si siguen iguales, el de
+# actividad más reciente. Los contactos no guardan perfil, pero las misiones sí
+# traen profile_tag y apuntan a un contacto: de ahí sale el desempate.
+PROFILE_RANKING_SQL = """
+SELECT ps.*,
+       (SELECT COUNT(DISTINCT t.contact_id) FROM tasks t
+         WHERE t.user_id=ps.user_id AND t.profile_tag=ps.label AND t.contact_id IS NOT NULL) AS linked_contacts,
+       (SELECT MAX(t.due_date) FROM tasks t
+         WHERE t.user_id=ps.user_id AND t.profile_tag=ps.label) AS last_activity
+  FROM profile_scores ps
+ WHERE ps.user_id=?
+ ORDER BY ps.score DESC, linked_contacts DESC, last_activity DESC, ps.id
+"""
+
+
+def ranked_profiles(db, user_id: int) -> list:
+    return rows(db.execute(PROFILE_RANKING_SQL, (user_id,)))
+
+
 def dashboard_payload(db, user_id: int) -> dict:
     new_achievements = sync_progress(db, user_id)
     user = fetch_one(db, "SELECT * FROM users WHERE id=?", (user_id,))
-    profile_scores = rows(db.execute("SELECT * FROM profile_scores WHERE user_id=? ORDER BY score DESC", (user_id,)))
+    profile_scores = ranked_profiles(db, user_id)
     task_list = rows(db.execute("SELECT t.*, c.name AS contact_name FROM tasks t LEFT JOIN contacts c ON c.id=t.contact_id WHERE t.user_id=? AND t.due_date=? ORDER BY t.completed, t.due_time", (user_id, today())))
     contact_counts = {item["kind"]: item["count"] for item in rows(db.execute("SELECT kind,COUNT(*) count FROM contacts WHERE user_id=? GROUP BY kind", (user_id,)))}
     metrics = fetch_one(db, "SELECT * FROM daily_metrics WHERE user_id=? AND metric_date=?", (user_id, today())) or {}
@@ -1744,7 +1764,7 @@ class AppHandler(BaseHTTPRequestHandler):
         with connect() as db:
             for key, score in limpios.items():
                 db.execute("UPDATE profile_scores SET score=? WHERE user_id=? AND profile_key=?", (score, self.user_id, key))
-            winner = db.execute("SELECT label FROM profile_scores WHERE user_id=? ORDER BY score DESC LIMIT 1", (self.user_id,)).fetchone()[0]
+            winner = ranked_profiles(db, self.user_id)[0]["label"]
             db.execute("UPDATE users SET dominant_profile=?, xp=xp+75 WHERE id=?", (winner, self.user_id))
         self.send_json({"ok": True, "dominant_profile": winner, "message": "Tu brújula fue actualizada +75 XP"})
 

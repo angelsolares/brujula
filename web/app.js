@@ -336,7 +336,9 @@ function renderCompass(profiles, user) {
   const host = $("#profileCompass");
   if (!host || !profiles?.length) return;
   host.innerHTML = compassSvg(profiles, user);
-  const orden = [...profiles].sort((a, b) => b.score - a.score);
+  // El servidor ya los manda ordenados, con el desempate por contactos
+  // trabajados y actividad reciente ya resuelto; reordenar aquí lo perdería.
+  const orden = profiles;
   const combinacion = profileCombinations[[orden[0].profile_key, orden[1].profile_key].sort().join("|")];
   $("#profileCombination").textContent = combinacion
     ? `${orden[0].label} + ${orden[1].label} = ${combinacion.name}`
