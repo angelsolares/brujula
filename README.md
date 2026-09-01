@@ -101,6 +101,14 @@ al reiniciarla. Úsalo solo para esa cuenta de prueba, nunca para una cuenta rea
 python server.py --reset-password prueba@brujula.mx --password "una-clave-fija"
 ```
 
+Para dejar esa cuenta presentable —contactos, misiones, métricas, metas y desarrollo—
+`--demo-data` la llena con el mismo contenido de demostración con el que nace la base.
+Reemplaza lo que la cuenta tuviera, así que es para cuentas de prueba, no para reales.
+
+```bash
+python server.py --demo-data prueba@brujula.mx
+```
+
 Detalles de la protección:
 
 - Sesión en cookie `HttpOnly` con `SameSite=Lax`, y `Secure` cuando se sirve por HTTPS.

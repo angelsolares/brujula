@@ -637,80 +637,95 @@ def initialize_database() -> None:
             return
 
         db.execute(
-            "INSERT INTO users (id,name,purpose,dominant_profile,xp,streak,target_income,goal_date,rank) VALUES (1,?,?,?,?,?,?,?,'Asociado')",
-            (
-                "Mariana Torres",
-                "Construyo mi negocio para cuidar mi salud, alcanzar libertad financiera y ayudar a otras personas a crecer.",
-                "Liderazgo",
-                1480,
-                0,
-                35000,
-                day_offset(143),
-            ),
+            "INSERT INTO users (id,name,purpose,dominant_profile) VALUES (1,?,?,'Liderazgo')",
+            ("Mariana Torres", DEMO_PURPOSE),
         )
-        db.executemany(
-            "INSERT INTO profile_scores (user_id,profile_key,label,score,color) VALUES (1,?,?,?,?)",
-            [
-                ("leadership", "Liderazgo", 34, "#2878d0"),
-                ("connection", "Conexión", 31, "#7755c7"),
-                ("constancy", "Constancia", 27, "#55a85b"),
-                ("analyst", "Analista", 23, "#ef5f86"),
-                ("executor", "Ejecutor", 21, "#f49a2f"),
-            ],
-        )
-        db.executemany(
+        seed_demo_content(db, 1)
+
+DEMO_PURPOSE = ("Construyo mi negocio para cuidar mi salud, alcanzar libertad financiera "
+                "y ayudar a otras personas a crecer.")
+
+
+def seed_demo_content(db, user_id: int) -> None:
+    """Llena una cuenta con el contenido de demostración: contactos, misiones,
+    métricas, metas y desarrollo. Reemplaza lo que la cuenta tuviera, así que
+    sirve tanto para sembrar una base nueva como para dejar presentable otra vez
+    la cuenta de prueba."""
+    for tabla in ("tasks", "contacts", "daily_metrics", "goals", "development_items", "profile_scores"):
+        db.execute(f"DELETE FROM {tabla} WHERE user_id=?", (user_id,))
+    # El nombre, el género y el avatar son de la persona: esos no se tocan.
+    db.execute(
+        """UPDATE users SET purpose=?, dominant_profile='Liderazgo', xp=1480,
+           target_income=35000, goal_date=?, rank='Asociado' WHERE id=?""",
+        (DEMO_PURPOSE, day_offset(143), user_id),
+    )
+    db.executemany(
+        "INSERT INTO profile_scores (user_id,profile_key,label,score,color) VALUES (?,?,?,?,?)",
+        [(user_id, *fila) for fila in [
+            ("leadership", "Liderazgo", 34, "#2878d0"),
+            ("connection", "Conexión", 31, "#7755c7"),
+            ("constancy", "Constancia", 27, "#55a85b"),
+            ("analyst", "Analista", 23, "#ef5f86"),
+            ("executor", "Ejecutor", 21, "#f49a2f"),
+        ]],
+    )
+    contactos = []
+    for fila in [
+            ("Ana Robles", "Prospecto", "Alto", "Presentación", "Café virtual", "656 555 0148", "Problemas de circulación; busca más energía", "Cliente / Asociada", "", 0, "Contarle una historia de éxito e invitarla a café", day_offset(0), day_offset(-2), "1988-08-12", "No llamar durante el horario laboral."),
+            ("Pedro Sosa", "Prospecto", "Medio", "Contactado", "Referido", "656 555 0192", "Interés en rendimiento físico", "Cliente", "", 0, "Enviar video de testimonio", day_offset(0), day_offset(-4), None, "Prefiere mensajes de WhatsApp."),
+            ("Carlos Vega", "Prospecto", "Alto", "Seguimiento", "Facebook", "656 555 0174", "Investiga antioxidantes", "Cliente", "", 0, "Enviar video científico", day_offset(1), day_offset(-1), None, "Le interesan datos y estudios."),
+            ("Luisa Mendoza", "Cliente", "Alto", "Recompra", "En persona", "656 555 0107", "Bienestar general", "Cliente frecuente", "Immunocal Platinum", 3200, "Confirmar recompra mensual", day_offset(2), day_offset(-6), "1979-09-03", "Compartió un testimonio positivo."),
+            ("Karina López", "Cliente", "Medio", "Testimonio", "Instagram", "656 555 0119", "Recuperación deportiva", "Referidos", "Immunocal Sport", 2100, "Solicitar testimonio y dos referidos", day_offset(3), day_offset(-7), None, "Participa en carreras locales."),
+            ("Claudia Ruiz", "Asociado", "Alto", "Capacitación", "Evento", "656 555 0133", "", "Líder de equipo", "", 4500, "Revisar plan semanal de cinco contactos", day_offset(0), day_offset(-3), "1985-11-28", "Perfil Conexión-Constancia."),
+            ("Luis Ortega", "Asociado", "Medio", "Activación", "Referido", "656 555 0166", "", "Productor", "", 1800, "Agendar capacitación técnica", day_offset(4), day_offset(-10), None, "Necesita acompañamiento para crear rutina."),
+    ]:
+        cursor = db.execute(
             """INSERT INTO contacts
             (user_id,name,kind,interest,stage,source,phone,health_profile,estimated_objective,products,monthly_consumption,next_action,next_action_date,last_contact,birthday,notes)
-            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            [
-                ("Ana Robles", "Prospecto", "Alto", "Presentación", "Café virtual", "656 555 0148", "Problemas de circulación; busca más energía", "Cliente / Asociada", "", 0, "Contarle una historia de éxito e invitarla a café", day_offset(0), day_offset(-2), "1988-08-12", "No llamar durante el horario laboral."),
-                ("Pedro Sosa", "Prospecto", "Medio", "Contactado", "Referido", "656 555 0192", "Interés en rendimiento físico", "Cliente", "", 0, "Enviar video de testimonio", day_offset(0), day_offset(-4), None, "Prefiere mensajes de WhatsApp."),
-                ("Carlos Vega", "Prospecto", "Alto", "Seguimiento", "Facebook", "656 555 0174", "Investiga antioxidantes", "Cliente", "", 0, "Enviar video científico", day_offset(1), day_offset(-1), None, "Le interesan datos y estudios."),
-                ("Luisa Mendoza", "Cliente", "Alto", "Recompra", "En persona", "656 555 0107", "Bienestar general", "Cliente frecuente", "Immunocal Platinum", 3200, "Confirmar recompra mensual", day_offset(2), day_offset(-6), "1979-09-03", "Compartió un testimonio positivo."),
-                ("Karina López", "Cliente", "Medio", "Testimonio", "Instagram", "656 555 0119", "Recuperación deportiva", "Referidos", "Immunocal Sport", 2100, "Solicitar testimonio y dos referidos", day_offset(3), day_offset(-7), None, "Participa en carreras locales."),
-                ("Claudia Ruiz", "Asociado", "Alto", "Capacitación", "Evento", "656 555 0133", "", "Líder de equipo", "", 4500, "Revisar plan semanal de cinco contactos", day_offset(0), day_offset(-3), "1985-11-28", "Perfil Conexión-Constancia."),
-                ("Luis Ortega", "Asociado", "Medio", "Activación", "Referido", "656 555 0166", "", "Productor", "", 1800, "Agendar capacitación técnica", day_offset(4), day_offset(-10), None, "Necesita acompañamiento para crear rutina."),
-            ],
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (user_id, *fila),
         )
-        db.executemany(
-            "INSERT INTO tasks (user_id,title,detail,category,profile_tag,points,due_date,due_time,completed,contact_id) VALUES (1,?,?,?,?,?,?,?,?,?)",
-            [
-                ("Llamar a Ana Robles", "Invitarla a un café y compartir historia de éxito", "Llamada", "Conexión", 30, today(),"09:30", 0, 1),
-                ("Enviar testimonio a Pedro", "Video corto de resultado de cliente", "Contenido", "Conexión", 20, today(),"11:00", 1, 2),
-                ("Revisar plan con Claudia", "Cinco contactos y seguimiento semanal", "Mentoría", "Liderazgo", 40, today(),"16:00", 0, 6),
-                ("Publicar historia en Facebook", "Tema: energía para tu día", "Redes", "Ejecutor", 20, today(),"18:30", 0, None),
-                ("Módulo de conocimiento científico", "Completar la lección de glutatión", "Capacitación", "Analista", 35, today(),"20:00", 0, None),
-                ("Actualizar el CRM", "Registrar contactos y próximos pasos", "Organización", "Constancia", 25, today(),"20:30", 0, None),
-            ],
-        )
-        db.executemany(
-            "INSERT INTO daily_metrics (user_id,metric_date,new_prospects,presentations,new_clients,new_associates,sales,volume_points,client_orders,products_sold) VALUES (1,?,?,?,?,?,?,?,?,?)",
-            [
-                (day_offset(-4), 3, 2, 1, 0, 4200, 600, 1, "Platinum x1, Sport x1"),
-                (day_offset(-3), 2, 1, 0, 1, 3100, 440, 1, "Classic x1"),
-                (day_offset(-2), 5, 3, 2, 0, 7800, 1120, 2, "Platinum x2, Sport x1"),
-                (day_offset(-1), 4, 2, 1, 1, 6400, 920, 1, "Platinum x1, Classic x2"),
-                (day_offset(0), 2, 1, 1, 0, 3200, 460, 1, "Platinum x1"),
-            ],
-        )
-        db.executemany(
-            "INSERT INTO goals (user_id,title,current,target,unit,color) VALUES (1,?,?,?,?,?)",
-            [
-                ("Lista de prospectos", 68, 100, "personas", "#7755c7"),
-                ("Contactos esta semana", 17, 25, "contactos", "#ef5f86"),
-                ("Ventas del mes", 24700, 35000, "MXN", "#f2a93b"),
-                ("Sesiones de conocimiento", 3, 4, "sesiones", "#2878d0"),
-            ],
-        )
-        db.executemany(
-            "INSERT INTO development_items (user_id,title,kind,progress,profile_tag,points) VALUES (1,?,?,?,?,?)",
-            [
-                ("Fundamentos científicos del producto", "Curso", 72, "Analista", 120),
-                ("Conversaciones que conectan", "Práctica", 45, "Conexión", 90),
-                ("Formación de líderes", "Ruta", 28, "Liderazgo", 180),
-                ("Sistema de seguimiento semanal", "Hábito", 83, "Constancia", 110),
-            ],
-        )
+        contactos.append(cursor.lastrowid)
+    db.executemany(
+        "INSERT INTO tasks (user_id,title,detail,category,profile_tag,points,due_date,due_time,completed,contact_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [(user_id, *fila) for fila in [
+            ("Llamar a Ana Robles", "Invitarla a un café y compartir historia de éxito", "Llamada", "Conexión", 30, today(),"09:30", 0, contactos[0]),
+            ("Enviar testimonio a Pedro", "Video corto de resultado de cliente", "Contenido", "Conexión", 20, today(),"11:00", 1, contactos[1]),
+            ("Revisar plan con Claudia", "Cinco contactos y seguimiento semanal", "Mentoría", "Liderazgo", 40, today(),"16:00", 0, contactos[5]),
+            ("Publicar historia en Facebook", "Tema: energía para tu día", "Redes", "Ejecutor", 20, today(),"18:30", 0, None),
+            ("Módulo de conocimiento científico", "Completar la lección de glutatión", "Capacitación", "Analista", 35, today(),"20:00", 0, None),
+            ("Actualizar el CRM", "Registrar contactos y próximos pasos", "Organización", "Constancia", 25, today(),"20:30", 0, None),
+        ]],
+    )
+    db.executemany(
+        "INSERT INTO daily_metrics (user_id,metric_date,new_prospects,presentations,new_clients,new_associates,sales,volume_points,client_orders,products_sold) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [(user_id, *fila) for fila in [
+            (day_offset(-4), 3, 2, 1, 0, 4200, 600, 1, "Platinum x1, Sport x1"),
+            (day_offset(-3), 2, 1, 0, 1, 3100, 440, 1, "Classic x1"),
+            (day_offset(-2), 5, 3, 2, 0, 7800, 1120, 2, "Platinum x2, Sport x1"),
+            (day_offset(-1), 4, 2, 1, 1, 6400, 920, 1, "Platinum x1, Classic x2"),
+            (day_offset(0), 2, 1, 1, 0, 3200, 460, 1, "Platinum x1"),
+        ]],
+    )
+    db.executemany(
+        "INSERT INTO goals (user_id,title,current,target,unit,color) VALUES (?,?,?,?,?,?)",
+        [(user_id, *fila) for fila in [
+            ("Lista de prospectos", 68, 100, "personas", "#7755c7"),
+            ("Contactos esta semana", 17, 25, "contactos", "#ef5f86"),
+            ("Ventas del mes", 24700, 35000, "MXN", "#f2a93b"),
+            ("Sesiones de conocimiento", 3, 4, "sesiones", "#2878d0"),
+        ]],
+    )
+    db.executemany(
+        "INSERT INTO development_items (user_id,title,kind,progress,profile_tag,points) VALUES (?,?,?,?,?,?)",
+        [(user_id, *fila) for fila in [
+            ("Fundamentos científicos del producto", "Curso", 72, "Analista", 120),
+            ("Conversaciones que conectan", "Práctica", 45, "Conexión", 90),
+            ("Formación de líderes", "Ruta", 28, "Liderazgo", 180),
+            ("Sistema de seguimiento semanal", "Hábito", 83, "Constancia", 110),
+        ]],
+    )
+    sync_achievement_catalog(db, user_id)
 
 
 def compute_streak(db, user_id: int) -> int:
@@ -1846,6 +1861,9 @@ def main() -> None:
     parser.add_argument("--password", metavar="CLAVE",
                         help="Fija esta contraseña en vez de sortear una y la deja como definitiva; "
                              "acompaña a --add-account o a --reset-password")
+    parser.add_argument("--demo-data", metavar="CORREO",
+                        help="Llena esa cuenta con los datos de demostración (contactos, misiones, "
+                             "métricas, metas y desarrollo). Reemplaza lo que tuviera")
     parser.add_argument("--list-accounts", action="store_true")
     args = parser.parse_args()
     global APP_VERSION
@@ -1881,6 +1899,20 @@ def main() -> None:
             print("  Queda como definitiva: no se le pedirá cambiarla al entrar.\n")
             return
         print("  Guárdala ahora: no se vuelve a mostrar. Se le pedirá cambiarla al entrar.\n")
+        return
+    if args.demo_data:
+        correo = clean_email(args.demo_data, "El correo").lower()
+        with connect() as db:
+            cuenta = fetch_one(db, "SELECT user_id,name,email FROM accounts WHERE email=?", (correo,))
+            if not cuenta:
+                print(f"\n  No hay ninguna cuenta con el correo {correo}")
+                print("  Revisa los correos dados de alta con --list-accounts\n")
+                raise SystemExit(1)
+            seed_demo_content(db, cuenta["user_id"])
+            conteos = {tabla: db.execute(f"SELECT COUNT(*) FROM {tabla} WHERE user_id=?", (cuenta["user_id"],)).fetchone()[0]
+                       for tabla in ("contacts", "tasks", "daily_metrics", "goals", "development_items")}
+        print(f"\n  Datos de demostración puestos en {cuenta['name']} <{cuenta['email']}>")
+        print("  " + " · ".join(f"{cantidad} {tabla}" for tabla, cantidad in conteos.items()) + "\n")
         return
     if args.list_accounts:
         with connect() as db:
