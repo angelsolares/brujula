@@ -1,0 +1,17 @@
+{
+  "name": "BRÚJULA · Centro de desarrollo",
+  "short_name": "BRÚJULA",
+  "description": "CRM gamificado para descubrir fortalezas, trazar el rumbo y alcanzar metas.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#17234a",
+  "theme_color": "#17234a",
+  "icons": [
+    { "src": "/assets/app-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/app-icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/assets/app-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

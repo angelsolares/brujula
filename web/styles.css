@@ -465,7 +465,15 @@ button:disabled { opacity:.6; cursor:not-allowed; }
 }
 @media (max-width: 700px) {
   .main-content { padding:0 14px 40px; }.topbar { height:92px; }.topbar h1 { font-size:21px; }.eyebrow { font-size:8px; }.xp-pill,.icon-button,.top-actions .primary-button { display:none; }
-  .hero-card { min-height:470px; background-position:60% center; }.hero-overlay { background:linear-gradient(0deg,rgba(17,25,50,.94),rgba(17,25,50,.35)); }.hero-copy { width:100%; padding:180px 24px 25px; }.hero-copy h2 { font-size:34px; }.hero-medal { right:20px; top:24px; bottom:auto; }
+  /* En el celular la ilustración se muestra completa (mapa y copa incluidos): ocupa el ancho
+     de la tarjeta con su proporción real y el texto va debajo, sobre azul marino. */
+  .hero-card { min-height:0; display:flex; flex-direction:column; background-color:#111932; background-size:100% auto; background-position:top center; }
+  .hero-card::before { content:""; display:block; width:100%; aspect-ratio:1779/884; }
+  .hero-overlay { display:none; }
+  .hero-medal { order:1; position:relative; z-index:2; right:auto; top:auto; bottom:auto; align-self:flex-end; width:74px; height:74px; margin:-37px 18px -37px 0; }
+  .hero-medal strong { font-size:20px; }.hero-medal > span { top:-15px; left:24px; font-size:24px; }
+  .hero-copy { order:2; width:100%; margin-top:-46px; padding:64px 22px 24px; background:linear-gradient(180deg,rgba(17,25,50,0),rgba(17,25,50,.96) 46px,#111932); }
+  .hero-copy h2 { font-size:30px; }
   .motivation-card { grid-template-columns:1fr; gap:14px; padding:20px; }.motivation-icon { width:48px; height:48px; font-size:23px; }.motivation-body h3 { font-size:17px; }.motivation-card .light-button { width:100%; }
   .achievement-strip { grid-template-columns:1fr; }.guide-achievement-list { grid-template-columns:1fr; }
   .plan-concepts { grid-template-columns:1fr; }.plan-bonus-grid { grid-template-columns:1fr; }.plan-concept { grid-template-columns:40px 1fr; }

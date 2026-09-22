@@ -34,12 +34,14 @@ MAX_BODY_BYTES = 1_000_000
 SESSION_COOKIE = "brujula_sesion"
 SESSION_DAYS = 30
 PBKDF2_ROUNDS = 260_000
+# Python no conoce la extensión del manifiesto PWA; sin esto la serviría como binario.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 LOGIN_RATE_LIMIT = 10
 LOGIN_RATE_WINDOW = 600
 VALID_ROLES = {"admin", "consultor"}
 
 # Rutas que funcionan sin haber iniciado sesión.
-PUBLIC_PATHS = {"/login", "/login.html", "/api/auth/login", "/api/health"}
+PUBLIC_PATHS = {"/login", "/login.html", "/api/auth/login", "/api/health", "/manifest.webmanifest"}
 PUBLIC_PREFIXES = ("/captura/", "/api/captura/", "/assets/", "/styles.css", "/favicon")
 
 
