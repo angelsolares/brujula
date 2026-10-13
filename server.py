@@ -99,6 +99,7 @@ def day_offset(days: int) -> str:
 VALID_KINDS = {"Prospecto", "Cliente", "Asociado"}
 VALID_INTEREST = {"Alto", "Medio", "Bajo"}
 VALID_GENDERS = {"female", "male", "neutral"}
+VALID_CHANNELS = {"Llamada", "Mensaje", "WhatsApp", "Reunión", "Café", "Correo", "Evento", "Otro"}
 
 # Rasgos del avatar: por cada uno, sus opciones válidas y con cuál nace la cuenta.
 # El dibujo vive en web/avatar.js; aquí solo se valida y se guarda lo elegido, así
@@ -399,6 +400,16 @@ CREATE TABLE IF NOT EXISTS development_items (
   points INTEGER NOT NULL DEFAULT 0,
   user_id INTEGER NOT NULL DEFAULT 1
 )""",
+    """
+CREATE TABLE IF NOT EXISTS followups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL DEFAULT 1,
+  contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  followup_date TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'Llamada',
+  note TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)""",
 ]
 
 
@@ -513,7 +524,7 @@ def rebuild_for_multiuser(db, table: str, columns: str, unique: str) -> None:
 
 
 def migrate_multiuser(db) -> None:
-    for tabla in ("contacts", "tasks", "goals", "development_items", "capture_sessions"):
+    for tabla in ("contacts", "tasks", "goals", "development_items", "capture_sessions", "followups"):
         ensure_column(db, tabla, "user_id", "INTEGER NOT NULL DEFAULT 1")
     rebuild_for_multiuser(db, "daily_metrics", """  id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL DEFAULT 1,
@@ -653,7 +664,7 @@ def seed_demo_content(db, user_id: int) -> None:
     métricas, metas y desarrollo. Reemplaza lo que la cuenta tuviera, así que
     sirve tanto para sembrar una base nueva como para dejar presentable otra vez
     la cuenta de prueba."""
-    for tabla in ("tasks", "contacts", "daily_metrics", "goals", "development_items", "profile_scores"):
+    for tabla in ("followups", "tasks", "contacts", "daily_metrics", "goals", "development_items", "profile_scores"):
         db.execute(f"DELETE FROM {tabla} WHERE user_id=?", (user_id,))
     # El nombre, el género y el avatar son de la persona: esos no se tocan.
     db.execute(
@@ -674,7 +685,7 @@ def seed_demo_content(db, user_id: int) -> None:
     contactos = []
     for fila in [
             ("Ana Robles", "Prospecto", "Alto", "Presentación", "Café virtual", "656 555 0148", "Problemas de circulación; busca más energía", "Cliente / Asociada", "", 0, "Contarle una historia de éxito e invitarla a café", day_offset(0), day_offset(-2), "1988-08-12", "No llamar durante el horario laboral."),
-            ("Pedro Sosa", "Prospecto", "Medio", "Contactado", "Referido", "656 555 0192", "Interés en rendimiento físico", "Cliente", "", 0, "Enviar video de testimonio", day_offset(0), day_offset(-4), None, "Prefiere mensajes de WhatsApp."),
+            ("Pedro Sosa", "Prospecto", "Medio", "Contactado", "Referido", "656 555 0192", "Interés en rendimiento físico", "Cliente", "", 0, "Enviar video de testimonio", day_offset(-1), day_offset(-4), None, "Prefiere mensajes de WhatsApp."),
             ("Carlos Vega", "Prospecto", "Alto", "Seguimiento", "Facebook", "656 555 0174", "Investiga antioxidantes", "Cliente", "", 0, "Enviar video científico", day_offset(1), day_offset(-1), None, "Le interesan datos y estudios."),
             ("Luisa Mendoza", "Cliente", "Alto", "Recompra", "En persona", "656 555 0107", "Bienestar general", "Cliente frecuente", "Immunocal Platinum", 3200, "Confirmar recompra mensual", day_offset(2), day_offset(-6), "1979-09-03", "Compartió un testimonio positivo."),
             ("Karina López", "Cliente", "Medio", "Testimonio", "Instagram", "656 555 0119", "Recuperación deportiva", "Referidos", "Immunocal Sport", 2100, "Solicitar testimonio y dos referidos", day_offset(3), day_offset(-7), None, "Participa en carreras locales."),
@@ -725,6 +736,21 @@ def seed_demo_content(db, user_id: int) -> None:
             ("Conversaciones que conectan", "Práctica", 45, "Conexión", 90),
             ("Formación de líderes", "Ruta", 28, "Liderazgo", 180),
             ("Sistema de seguimiento semanal", "Hábito", 83, "Constancia", 110),
+        ]],
+    )
+    # Historial de seguimientos anteriores por persona, para que la ficha
+    # muestre la relación completa y no solo el próximo paso.
+    db.executemany(
+        "INSERT INTO followups (user_id,contact_id,followup_date,channel,note) VALUES (?,?,?,?,?)",
+        [(user_id, *fila) for fila in [
+            (contactos[0], day_offset(-9), "Café", "Primer café. Le conté mi historia; quedó interesada en la energía."),
+            (contactos[0], day_offset(-2), "WhatsApp", "Le mandé un testimonio en video. Pidió una segunda plática."),
+            (contactos[1], day_offset(-11), "Mensaje", "Lo contactó un referido. Pidió información por WhatsApp."),
+            (contactos[1], day_offset(-4), "Llamada", "Hablamos de rendimiento físico. Le interesa el Sport."),
+            (contactos[3], day_offset(-30), "Reunión", "Cerró su primera compra de Platinum."),
+            (contactos[3], day_offset(-6), "WhatsApp", "Confirmó que se siente con más ánimo. Compartió testimonio."),
+            (contactos[5], day_offset(-14), "Evento", "La conocí en un evento. Perfil de liderazgo, le entusiasma el equipo."),
+            (contactos[5], day_offset(-3), "Reunión", "Revisamos su plan semanal de cinco contactos."),
         ]],
     )
     sync_achievement_catalog(db, user_id)
@@ -1130,6 +1156,38 @@ def ranked_profiles(db, user_id: int) -> list:
     return rows(db.execute(PROFILE_RANKING_SQL, (user_id,)))
 
 
+def followup_alerts(db, user_id: int, upcoming_days: int = 7) -> dict:
+    """Agrupa a las personas con una próxima acción agendada en atrasadas, de hoy
+    y próximas. Es la base de las alertas de seguimiento dentro de la app."""
+    hoy = today()
+    limite = day_offset(upcoming_days)
+    personas = rows(db.execute(
+        """SELECT id, name, kind, interest, stage, phone, next_action, next_action_date, last_contact
+           FROM contacts
+           WHERE user_id=? AND COALESCE(TRIM(next_action_date),'') <> ''
+           ORDER BY next_action_date, CASE interest WHEN 'Alto' THEN 1 WHEN 'Medio' THEN 2 ELSE 3 END""",
+        (user_id,)))
+    overdue, due_today, upcoming = [], [], []
+    for persona in personas:
+        fecha = persona["next_action_date"]
+        if fecha < hoy:
+            persona["bucket"] = "overdue"
+            overdue.append(persona)
+        elif fecha == hoy:
+            persona["bucket"] = "today"
+            due_today.append(persona)
+        elif fecha <= limite:
+            persona["bucket"] = "upcoming"
+            upcoming.append(persona)
+    return {
+        "overdue": overdue,
+        "today": due_today,
+        "upcoming": upcoming,
+        "counts": {"overdue": len(overdue), "today": len(due_today), "upcoming": len(upcoming)},
+        "pending": len(overdue) + len(due_today),
+    }
+
+
 def dashboard_payload(db, user_id: int) -> dict:
     new_achievements = sync_progress(db, user_id)
     user = fetch_one(db, "SELECT * FROM users WHERE id=?", (user_id,))
@@ -1163,6 +1221,7 @@ def dashboard_payload(db, user_id: int) -> dict:
         "new_achievements": new_achievements,
         "recent_contacts": rows(db.execute("SELECT * FROM contacts WHERE user_id=? ORDER BY COALESCE(last_contact,created_at) DESC LIMIT 5", (user_id,))),
         "development": rows(db.execute("SELECT * FROM development_items WHERE user_id=? ORDER BY id", (user_id,))),
+        "alerts": followup_alerts(db, user_id),
     }
 
 
@@ -1270,8 +1329,11 @@ class AppHandler(BaseHTTPRequestHandler):
 
     def route_post(self) -> None:
         parsed = urlparse(self.path)
+        parts = parsed.path.strip("/").split("/")
         if parsed.path == "/api/contacts":
             self.create_contact()
+        elif len(parts) == 4 and parts[:2] == ["api", "contacts"] and parts[3] == "followups":
+            self.create_followup(self.parse_id(parts[2]))
         elif parsed.path == "/api/metrics":
             self.save_metrics()
         elif parsed.path == "/api/profile/scores":
@@ -1383,6 +1445,8 @@ class AppHandler(BaseHTTPRequestHandler):
             self.delete_record("contacts", self.parse_id(parts[2]), "Contacto eliminado")
         elif len(parts) == 3 and parts[:2] == ["api", "tasks"]:
             self.delete_record("tasks", self.parse_id(parts[2]), "Misión eliminada")
+        elif len(parts) == 3 and parts[:2] == ["api", "followups"]:
+            self.delete_record("followups", self.parse_id(parts[2]), "Seguimiento eliminado")
         elif len(parts) == 3 and parts[:2] == ["api", "capture-sessions"]:
             self.delete_record("capture_sessions", self.parse_id(parts[2]), "Sesión de captura eliminada")
         else:
@@ -1395,7 +1459,17 @@ class AppHandler(BaseHTTPRequestHandler):
             return None
 
     def handle_api_get(self, parsed) -> None:
+        parts = parsed.path.strip("/").split("/")
+        if len(parts) == 4 and parts[:2] == ["api", "contacts"] and parts[3] == "followups":
+            self.list_followups(self.parse_id(parts[2]))
+            return
+        if len(parts) == 3 and parts[:2] == ["api", "contacts"]:
+            self.get_contact(self.parse_id(parts[2]))
+            return
         with connect() as db:
+            if parsed.path == "/api/alerts":
+                self.send_json(followup_alerts(db, self.user_id))
+                return
             if parsed.path == "/api/auth/me":
                 self.send_json({"name": self.account["name"], "email": self.account["email"],
                                 "role": self.account["role"],
@@ -1514,6 +1588,60 @@ class AppHandler(BaseHTTPRequestHandler):
             record = fetch_one(db, "SELECT * FROM contacts WHERE id=? AND user_id=?", (contact_id, self.user_id))
         self.send_json(record if record else {"error": "No encontrado"}, HTTPStatus.OK if record else HTTPStatus.NOT_FOUND)
 
+    def get_contact(self, contact_id: int | None) -> None:
+        if contact_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        with connect() as db:
+            contacto = fetch_one(db, "SELECT * FROM contacts WHERE id=? AND user_id=?", (contact_id, self.user_id))
+        self.send_json(contacto if contacto else {"error": "No encontrado"},
+                       HTTPStatus.OK if contacto else HTTPStatus.NOT_FOUND)
+
+    def list_followups(self, contact_id: int | None) -> None:
+        if contact_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        with connect() as db:
+            contacto = fetch_one(db, "SELECT id FROM contacts WHERE id=? AND user_id=?", (contact_id, self.user_id))
+            if not contacto:
+                self.send_json({"error": "No encontrado"}, HTTPStatus.NOT_FOUND)
+                return
+            self.send_json(rows(db.execute(
+                "SELECT * FROM followups WHERE contact_id=? AND user_id=? ORDER BY followup_date DESC, id DESC",
+                (contact_id, self.user_id))))
+
+    def create_followup(self, contact_id: int | None) -> None:
+        if contact_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        data = self.read_json()
+        with connect() as db:
+            contacto = fetch_one(db, "SELECT * FROM contacts WHERE id=? AND user_id=?", (contact_id, self.user_id))
+            if not contacto:
+                self.send_json({"error": "No encontrado"}, HTTPStatus.NOT_FOUND)
+                return
+            followup_date = clean_date(data.get("followup_date"), "La fecha del seguimiento") or today()
+            channel = clean_choice(data.get("channel"), VALID_CHANNELS, "El canal", "Llamada")
+            note = clean_text(data.get("note"), 1000, "La nota del seguimiento")
+            next_action = clean_text(data.get("next_action"), 300, "La próxima acción")
+            next_action_date = clean_date(data.get("next_action_date"), "La próxima fecha")
+            cursor = db.execute(
+                "INSERT INTO followups (user_id,contact_id,followup_date,channel,note) VALUES (?,?,?,?,?)",
+                (self.user_id, contact_id, followup_date, channel, note))
+            # Registrar un seguimiento actualiza el "último contacto" y, si se indicó,
+            # agenda el siguiente paso (la alerta): así queda todo en un solo gesto.
+            cambios = {"last_contact": followup_date}
+            if next_action:
+                cambios["next_action"] = next_action
+            if next_action_date:
+                cambios["next_action_date"] = next_action_date
+            db.execute(f"UPDATE contacts SET {','.join(f'{k}=?' for k in cambios)} WHERE id=? AND user_id=?",
+                       list(cambios.values()) + [contact_id, self.user_id])
+            db.execute("UPDATE users SET xp=xp+10 WHERE id=?", (self.user_id,))
+            followup = fetch_one(db, "SELECT * FROM followups WHERE id=?", (cursor.lastrowid,))
+            contacto = fetch_one(db, "SELECT * FROM contacts WHERE id=? AND user_id=?", (contact_id, self.user_id))
+        self.send_json({"followup": followup, "contact": contacto}, HTTPStatus.CREATED)
+
     def delete_record(self, table: str, record_id: int | None, message: str) -> None:
         if record_id is None:
             self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
@@ -1523,6 +1651,10 @@ class AppHandler(BaseHTTPRequestHandler):
             if not existing:
                 self.send_json({"error": "No encontrado"}, HTTPStatus.NOT_FOUND)
                 return
+            # En Turso no se aplica la cascada de llaves foráneas: limpiamos a mano
+            # el historial de seguimientos para no dejar registros huérfanos.
+            if table == "contacts":
+                db.execute("DELETE FROM followups WHERE contact_id=? AND user_id=?", (record_id, self.user_id))
             db.execute(f"DELETE FROM {table} WHERE id=? AND user_id=?", (record_id, self.user_id))
         self.send_json({"ok": True, "message": message})
 

@@ -52,7 +52,7 @@
       </a>
       <nav class="nav-list">
         <button class="nav-item active" data-view="dashboard"><span>⌂</span> Mi tablero</button>
-        <button class="nav-item" data-view="contacts"><span>♙</span> Mi red <b id="navContactCount">0</b></button>
+        <button class="nav-item" data-view="contacts"><span>♙</span> Mi red <b id="navContactCount">0</b><i class="nav-alert-badge" id="navAlertBadge" hidden title="Seguimientos pendientes"></i></button>
         <button class="nav-item" data-view="agenda"><span>✓</span> Agenda de hoy</button>
         <button class="nav-item" data-view="map"><span>⌁</span> Mi mapa</button>
         <button class="nav-item" data-view="measure"><span>↗</span> Medir avances</button>
@@ -118,6 +118,18 @@
             <blockquote class="motivation-profile" id="motivationProfile" hidden></blockquote>
           </div>
           <button class="light-button" id="motivationAction" type="button" hidden></button>
+        </article>
+
+        <article class="panel followup-alerts-panel" id="followupAlertsPanel" hidden>
+          <div class="panel-head">
+            <div><span class="mini-kicker">SEGUIMIENTOS</span><h3 id="followupAlertsTitle">Personas que esperan tu seguimiento</h3></div>
+            <div class="followup-alerts-tools">
+              <button class="ghost-pill" id="followupNotifyButton" type="button" hidden>🔔 Activar avisos</button>
+              <button class="text-button" data-go-view="contacts">Ver toda mi red →</button>
+            </div>
+          </div>
+          <div class="followup-alert-list" id="followupAlertList"></div>
+          <p class="followup-upcoming-note" id="followupUpcomingNote" hidden></p>
         </article>
 
         <div class="section-heading compact" id="alertsHeading" hidden><div><span class="mini-kicker">PLAN DE COMPENSACIÓN</span><h2>Lo que puedes lograr este mes</h2></div><button class="text-button" data-go-view="map">Ver mi rango →</button></div>
@@ -537,6 +549,22 @@
         <label class="span-2"><span>Próxima acción</span><input name="next_action" placeholder="Ej. Enviar testimonio y agendar café"></label>
         <label class="span-2"><span>Notas</span><textarea name="notes" rows="3" placeholder="Detalles que te ayudarán a conectar mejor..."></textarea></label>
       </div>
+
+      <div class="followup-section" id="contactFollowups" hidden>
+        <div class="followup-head"><span class="mini-kicker">SEGUIMIENTOS</span><h3>Historial de esta persona</h3><p>Cada contacto que registras se guarda aquí, y agendar la próxima fecha enciende la alerta.</p></div>
+        <div class="followup-logger">
+          <div class="followup-logger-grid">
+            <label><span>Fecha</span><input id="followupDate" type="date"></label>
+            <label><span>Cómo fue</span><select id="followupChannel"><option>Llamada</option><option>Mensaje</option><option>WhatsApp</option><option>Reunión</option><option>Café</option><option>Correo</option><option>Evento</option><option>Otro</option></select></label>
+            <label class="span-2"><span>¿Qué pasó?</span><input id="followupNote" maxlength="1000" placeholder="Ej. Le envié el testimonio; quedó de contarme el viernes."></label>
+            <label><span>Agendar siguiente</span><input id="followupNextDate" type="date"></label>
+            <label class="span-2"><span>Siguiente acción</span><input id="followupNextAction" maxlength="300" placeholder="Ej. Llamar para confirmar su recompra"></label>
+          </div>
+          <div class="followup-logger-actions"><button type="button" class="primary-button" id="followupAddButton">Registrar seguimiento +10 XP</button></div>
+        </div>
+        <ol class="followup-timeline" id="followupTimeline"></ol>
+      </div>
+
       <div class="modal-actions"><button type="button" class="secondary-button" data-close-modal>Cancelar</button><button type="submit" class="primary-button" id="contactSubmitButton">Guardar contacto +25 XP</button></div>
     </form>
   </dialog>

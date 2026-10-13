@@ -1,4 +1,4 @@
-const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", activeSource: "", search: "", editingContactId: null, editingTaskId: null, version: null, ranks: [], captureSession: null, captureSessions: [], account: null };
+const state = { dashboard: null, contacts: [], metrics: [], activeKind: "", activeSource: "", search: "", editingContactId: null, editingTaskId: null, version: null, ranks: [], captureSession: null, captureSessions: [], account: null, alerts: null };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -780,6 +780,7 @@ async function loadDashboard() {
     updateGuideWithUser(user);
     $("#attentionContacts").innerHTML = data.recent_contacts.map(personCard).join("");
     renderContactSummary(counts);
+    renderFollowupAlerts(data.alerts);
     celebrate(data.new_achievements);
   } catch (error) {
     toast(`No pude cargar el tablero: ${error.message}`, "error");
@@ -900,6 +901,190 @@ async function deleteContact(contactId) {
     await Promise.all([loadDashboard(), loadContacts()]);
   } catch (error) { toast(error.message, "error"); }
   finally { setBusy("#contactRows", false); }
+}
+
+// --- Alertas y seguimientos -------------------------------------------------
+
+const channelIcons = { Llamada: "📞", Mensaje: "💬", WhatsApp: "🟢", Reunión: "🤝", Café: "☕", Correo: "✉", Evento: "🎪", Otro: "•" };
+
+function relativeDay(dateStr) {
+  if (!dateStr) return "";
+  const dias = Math.round((new Date(`${dateStr}T12:00:00`) - new Date(`${isoDate()}T12:00:00`)) / 86400000);
+  if (dias === 0) return "hoy";
+  if (dias === -1) return "ayer";
+  if (dias === 1) return "mañana";
+  if (dias < 0) return `hace ${Math.abs(dias)} días`;
+  return `en ${dias} días`;
+}
+
+function followupAlertItem(person) {
+  const tono = person.bucket === "overdue" ? "overdue" : person.bucket === "today" ? "today" : "upcoming";
+  const fecha = `${shortDate(person.next_action_date)} · ${relativeDay(person.next_action_date)}`;
+  return `<article class="followup-alert followup-alert-${tono}">
+    <span class="person-avatar" style="color:${typeColors[person.kind]};background:${typeColors[person.kind]}16">${initials(person.name)}</span>
+    <div class="followup-alert-body">
+      <strong>${escapeHtml(person.name)} <small>${escapeHtml(person.kind)}</small></strong>
+      <p>${escapeHtml(person.next_action || "Definir siguiente paso")}</p>
+      <time class="followup-when-${tono}">${fecha}</time>
+    </div>
+    <div class="followup-alert-actions">
+      <button class="primary-button tiny" data-followup-open="${person.id}">Registrar</button>
+      <button class="row-action" data-followup-snooze="${person.id}" title="Posponer un día">↷</button>
+    </div>
+  </article>`;
+}
+
+function renderFollowupAlerts(alerts) {
+  state.alerts = alerts || null;
+  const badge = $("#navAlertBadge");
+  const panel = $("#followupAlertsPanel");
+  if (!alerts) { if (panel) panel.hidden = true; if (badge) badge.hidden = true; return; }
+  const pendientes = [...alerts.overdue, ...alerts.today];
+  if (badge) {
+    badge.hidden = alerts.pending === 0;
+    badge.textContent = alerts.pending;
+  }
+  if (!panel) return;
+  if (pendientes.length === 0 && alerts.upcoming.length === 0) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const atrasados = alerts.counts.overdue;
+  $("#followupAlertsTitle").textContent = pendientes.length
+    ? `${pendientes.length} ${pendientes.length === 1 ? "persona espera" : "personas esperan"} tu seguimiento`
+    : "Sin seguimientos para hoy";
+  $("#followupAlertList").innerHTML = pendientes.length
+    ? pendientes.map(followupAlertItem).join("")
+    : `<p class="followup-empty">Nada vencido ni para hoy. Vas al día con tu red. 🎯</p>`;
+  const nota = $("#followupUpcomingNote");
+  if (alerts.upcoming.length) {
+    nota.hidden = false;
+    nota.textContent = `Y ${alerts.upcoming.length} más en los próximos días: ${alerts.upcoming.slice(0, 3).map((p) => `${p.name.split(/\s+/)[0]} (${relativeDay(p.next_action_date)})`).join(", ")}${alerts.upcoming.length > 3 ? "…" : "."}`;
+  } else {
+    nota.hidden = true;
+  }
+  if (atrasados) panel.classList.add("has-overdue"); else panel.classList.remove("has-overdue");
+  $$("[data-followup-open]").forEach((b) => b.addEventListener("click", () => openContactDialog(Number(b.dataset.followupOpen), true)));
+  $$("[data-followup-snooze]").forEach((b) => b.addEventListener("click", () => postponeAlert(Number(b.dataset.followupSnooze))));
+  setupNotifyButton();
+  maybeNotify(alerts);
+}
+
+async function postponeAlert(contactId) {
+  const persona = [...(state.alerts?.overdue || []), ...(state.alerts?.today || [])].find((p) => p.id === contactId);
+  const nueva = isoPlusDays(1);
+  try {
+    await api(`/api/contacts/${contactId}`, { method: "PATCH", body: JSON.stringify({ next_action_date: nueva }) });
+    toast(`${persona ? persona.name.split(/\s+/)[0] : "Seguimiento"} pospuesto a mañana`, "success");
+    await loadDashboard();
+  } catch (error) { toast(error.message, "error"); }
+}
+
+// Avisos del navegador: solo mientras la app está abierta, una vez por día.
+function setupNotifyButton() {
+  const boton = $("#followupNotifyButton");
+  if (!boton || !("Notification" in window)) return;
+  const pendientes = state.alerts?.pending || 0;
+  boton.hidden = !(pendientes > 0 && Notification.permission === "default");
+  if (!boton.dataset.wired) {
+    boton.dataset.wired = "1";
+    boton.addEventListener("click", async () => {
+      try {
+        const permiso = await Notification.requestPermission();
+        if (permiso === "granted") { toast("Listo, te avisaré de tus seguimientos", "success"); maybeNotify(state.alerts, true); }
+        setupNotifyButton();
+      } catch (_) { /* algunos navegadores lo bloquean en silencio */ }
+    });
+  }
+}
+
+function maybeNotify(alerts, force = false) {
+  if (!alerts || !("Notification" in window) || Notification.permission !== "granted") return;
+  if (!alerts.pending) return;
+  const marca = isoDate();
+  if (!force) { try { if (localStorage.getItem("brujula_notify_day") === marca) return; } catch (_) {} }
+  try { localStorage.setItem("brujula_notify_day", marca); } catch (_) {}
+  const cuerpo = alerts.counts.overdue
+    ? `${alerts.counts.overdue} atrasado${alerts.counts.overdue === 1 ? "" : "s"} y ${alerts.counts.today} para hoy.`
+    : `${alerts.counts.today} para hoy.`;
+  try {
+    const n = new Notification("BRÚJULA · Seguimientos", { body: `${cuerpo} Abre tu red para avanzar.`, icon: "/assets/app-icon-192.png", tag: "brujula-followups" });
+    n.onclick = () => { window.focus(); goToView("contacts"); n.close(); };
+  } catch (_) { /* en algunas plataformas requiere Service Worker; el panel ya cubre el aviso */ }
+}
+
+// --- Historial de seguimientos en la ficha ----------------------------------
+
+async function loadFollowups(contactId) {
+  const lista = $("#followupTimeline");
+  lista.innerHTML = `<li class="followup-loading">Cargando seguimientos…</li>`;
+  try {
+    const seguimientos = await api(`/api/contacts/${contactId}/followups`);
+    renderFollowupTimeline(seguimientos);
+  } catch (error) {
+    lista.innerHTML = `<li class="followup-empty">No pude cargar el historial.</li>`;
+  }
+}
+
+function renderFollowupTimeline(seguimientos) {
+  const lista = $("#followupTimeline");
+  if (!seguimientos.length) {
+    lista.innerHTML = `<li class="followup-empty">Aún no hay seguimientos. Registra el primero arriba.</li>`;
+    return;
+  }
+  lista.innerHTML = seguimientos.map((s) => `
+    <li class="followup-entry">
+      <span class="followup-dot">${channelIcons[s.channel] || "•"}</span>
+      <div class="followup-entry-body">
+        <div class="followup-entry-head"><strong>${escapeHtml(s.channel)}</strong><time>${shortDate(s.followup_date)} · ${relativeDay(s.followup_date)}</time></div>
+        ${s.note ? `<p>${escapeHtml(s.note)}</p>` : `<p class="followup-nonote">Sin nota.</p>`}
+      </div>
+      <button class="row-action danger" data-followup-del="${s.id}" title="Eliminar seguimiento">🗑</button>
+    </li>`).join("");
+  $$("[data-followup-del]").forEach((b) => b.addEventListener("click", () => deleteFollowup(Number(b.dataset.followupDel))));
+}
+
+async function submitFollowup() {
+  const contactId = state.editingContactId;
+  if (!contactId) return;
+  const note = $("#followupNote").value.trim();
+  const nextDate = $("#followupNextDate").value;
+  const nextAction = $("#followupNextAction").value.trim();
+  if (!note && !nextAction) { toast("Escribe qué pasó o agenda el siguiente paso.", "error"); return; }
+  const payload = {
+    followup_date: $("#followupDate").value || isoDate(),
+    channel: $("#followupChannel").value,
+    note,
+    next_action: nextAction,
+    next_action_date: nextDate || "",
+  };
+  await withLoading($("#followupAddButton"), async () => {
+    try {
+      const result = await api(`/api/contacts/${contactId}/followups`, { method: "POST", body: JSON.stringify(payload) });
+      $("#followupNote").value = "";
+      $("#followupNextAction").value = "";
+      $("#followupNextDate").value = "";
+      // Reflejar en la ficha abierta el nuevo "próximo paso" por si se agendó.
+      if (result.contact) {
+        if ($("#contactForm").elements.next_action) $("#contactForm").elements.next_action.value = result.contact.next_action || "";
+        if ($("#contactForm").elements.next_action_date) $("#contactForm").elements.next_action_date.value = result.contact.next_action_date || "";
+      }
+      toast("Seguimiento registrado +10 XP", "success");
+      await loadFollowups(contactId);
+      await Promise.all([loadDashboard(), loadContacts()]);
+    } catch (error) { toast(error.message, "error"); }
+  });
+}
+
+async function deleteFollowup(followupId) {
+  const ok = await confirmar({ title: "Eliminar seguimiento", message: "Se borra este registro del historial. Esta acción no se puede deshacer.", confirmText: "Sí, eliminar" });
+  if (!ok) return;
+  try {
+    await api(`/api/followups/${followupId}`, { method: "DELETE" });
+    toast("Seguimiento eliminado", "success");
+    if (state.editingContactId) await loadFollowups(state.editingContactId);
+  } catch (error) { toast(error.message, "error"); }
 }
 
 // --- Captura por QR ---------------------------------------------------------
@@ -1023,11 +1208,15 @@ function openQrFullscreen() {
   $("#qrFullscreenDialog").showModal();
 }
 
-function openContactDialog(contactId = null) {
+async function openContactDialog(contactId = null, focusFollowups = false) {
   const form = $("#contactForm");
   form.reset();
   state.editingContactId = contactId;
-  const contact = contactId ? state.contacts.find((item) => item.id === contactId) : null;
+  let contact = contactId ? state.contacts.find((item) => item.id === contactId) : null;
+  // Desde el tablero la lista de la red no está cargada: traemos la persona directo.
+  if (contactId && !contact) {
+    try { contact = await api(`/api/contacts/${contactId}`); } catch (_) { contact = null; }
+  }
   $("#contactModalKicker").textContent = contact ? "ACTUALIZAR RELACIÓN" : "NUEVA RELACIÓN";
   $("#contactModalTitle").textContent = contact ? `Editar a ${contact.name}` : "Agregar a mi red";
   $("#contactSubmitButton").textContent = contact ? "Guardar cambios" : "Guardar contacto +25 XP";
@@ -1045,7 +1234,23 @@ function openContactDialog(contactId = null) {
   } else {
     form.elements.next_action_date.value = isoPlusDays(1);
   }
+  // Sección de seguimientos: solo tiene sentido en una persona ya guardada.
+  const seccion = $("#contactFollowups");
+  if (contact) {
+    seccion.hidden = false;
+    $("#followupDate").value = isoDate();
+    $("#followupNote").value = "";
+    $("#followupNextAction").value = "";
+    $("#followupNextDate").value = "";
+    $("#followupTimeline").innerHTML = "";
+    loadFollowups(contact.id);
+  } else {
+    seccion.hidden = true;
+  }
   $("#contactDialog").showModal();
+  if (contact && focusFollowups) {
+    requestAnimationFrame(() => seccion.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 }
 
 async function loadMetrics() {
@@ -1193,6 +1398,7 @@ function bindEvents() {
   $$('[data-open-contact]').forEach((button) => button.addEventListener("click", () => openContactDialog()));
   $$('[data-close-modal]').forEach((button) => button.addEventListener("click", () => { state.editingContactId = null; $("#contactDialog").close(); }));
   $("#contactForm").addEventListener("submit", submitContact);
+  $("#followupAddButton").addEventListener("click", submitFollowup);
   $("#metricsForm").addEventListener("submit", submitMetrics);
   $("#openTaskDialog").addEventListener("click", () => openTaskDialog());
   $$('[data-close-task]').forEach((button) => button.addEventListener("click", () => { state.editingTaskId = null; $("#taskDialog").close(); }));
