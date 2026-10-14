@@ -14,6 +14,7 @@ import re
 import secrets
 import sqlite3
 import threading
+import unicodedata
 from datetime import date, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,6 +28,14 @@ ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "data" / "brujula.db"
 WEB_DIR = ROOT / "web"
 PUBLIC_DIR = ROOT / "public"
+TESTIMONIALS_SEED = ROOT / "testimonials_seed.json"
+
+
+def normalize_search(text: str) -> str:
+    """Minúsculas y sin acentos, para buscar 'gastritis' y encontrar 'Gástritis'."""
+    limpio = unicodedata.normalize("NFKD", str(text or ""))
+    limpio = "".join(c for c in limpio if not unicodedata.combining(c))
+    return limpio.lower().strip()
 
 MAX_BODY_BYTES = 1_000_000
 
@@ -410,6 +419,16 @@ CREATE TABLE IF NOT EXISTS followups (
   note TEXT DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )""",
+    """
+CREATE TABLE IF NOT EXISTS testimonials (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL,
+  drive_id TEXT NOT NULL UNIQUE,
+  search_text TEXT NOT NULL DEFAULT '',
+  transcript TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)""",
 ]
 
 
@@ -646,6 +665,7 @@ def initialize_database() -> None:
         db.execute("DELETE FROM sessions WHERE expires_at < ?", (datetime.now().isoformat(timespec="seconds"),))
         for existente in rows(db.execute("SELECT id FROM users")):
             sync_achievement_catalog(db, existente["id"])
+        seed_testimonials(db)
         if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
             return
 
@@ -1156,6 +1176,46 @@ def ranked_profiles(db, user_id: int) -> list:
     return rows(db.execute(PROFILE_RANKING_SQL, (user_id,)))
 
 
+def seed_testimonials(db) -> None:
+    """Carga el catálogo de testimonios en video (compartido por todos) desde el
+    archivo semilla, solo si la tabla está vacía. Idempotente por drive_id."""
+    try:
+        ya = db.execute("SELECT COUNT(*) FROM testimonials").fetchone()[0]
+        if ya or not TESTIMONIALS_SEED.exists():
+            return
+        datos = json.loads(TESTIMONIALS_SEED.read_text(encoding="utf-8"))
+        db.executemany(
+            "INSERT OR IGNORE INTO testimonials (category,name,drive_id,search_text) VALUES (?,?,?,?)",
+            [(d.get("category", ""), d.get("name", ""), d.get("drive_id", ""),
+              normalize_search(f"{d.get('category','')} {d.get('name','')}"))
+             for d in datos if d.get("drive_id")],
+        )
+        print(f"  catálogo de testimonios sembrado: {len(datos)} videos")
+    except Exception as exc:
+        print(f"  aviso: no se pudo sembrar testimonios ({exc})")
+
+
+def search_testimonials(db, query: str, limit: int = 60) -> dict:
+    """Busca testimonios por categoría, nombre y transcripción, ignorando acentos
+    y mayúsculas. Cada palabra de la búsqueda debe aparecer (AND)."""
+    terminos = [t for t in normalize_search(query).split() if t]
+    base = "SELECT id, category, name, drive_id FROM testimonials"
+    total = db.execute("SELECT COUNT(*) FROM testimonials").fetchone()[0]
+    if not terminos:
+        filas = rows(db.execute(f"{base} ORDER BY category, name LIMIT ?", (limit,)))
+    else:
+        where = " AND ".join("(search_text LIKE ? OR transcript LIKE ?)" for _ in terminos)
+        valores = []
+        for t in terminos:
+            like = f"%{t}%"
+            valores.extend([like, like])
+        filas = rows(db.execute(
+            f"{base} WHERE {where} ORDER BY category, name LIMIT ?", valores + [limit]))
+    for f in filas:
+        f["link"] = f"https://drive.google.com/file/d/{f['drive_id']}/view"
+    return {"total_catalog": total, "count": len(filas), "query": query, "results": filas}
+
+
 def followup_alerts(db, user_id: int, upcoming_days: int = 7) -> dict:
     """Agrupa a las personas con una próxima acción agendada en atrasadas, de hoy
     y próximas. Es la base de las alertas de seguimiento dentro de la app."""
@@ -1469,6 +1529,10 @@ class AppHandler(BaseHTTPRequestHandler):
         with connect() as db:
             if parsed.path == "/api/alerts":
                 self.send_json(followup_alerts(db, self.user_id))
+                return
+            if parsed.path == "/api/testimonials":
+                query = parse_qs(parsed.query).get("q", [""])[0]
+                self.send_json(search_testimonials(db, query))
                 return
             if parsed.path == "/api/auth/me":
                 self.send_json({"name": self.account["name"], "email": self.account["email"],

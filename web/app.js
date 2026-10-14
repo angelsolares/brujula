@@ -106,6 +106,7 @@ const viewTitles = {
   measure: "Lo que se mide, mejora",
   profile: "Tus fortalezas marcan el rumbo",
   development: "Crecer también es parte del plan",
+  testimonios: "Testimonios que respaldan tu mensaje",
   guide: "Todo gran viaje empieza con una guía",
 };
 
@@ -235,6 +236,7 @@ function goToView(viewName) {
   history.replaceState(null, "", `#${viewName}`);
   if (viewName === "contacts") loadContacts();
   if (viewName === "measure") loadMetrics();
+  if (viewName === "testimonios") loadTestimonials();
 }
 
 function selectedVisual(gender) {
@@ -1085,6 +1087,59 @@ async function deleteFollowup(followupId) {
     toast("Seguimiento eliminado", "success");
     if (state.editingContactId) await loadFollowups(state.editingContactId);
   } catch (error) { toast(error.message, "error"); }
+}
+
+// --- Testimonios en video (catálogo) ----------------------------------------
+
+let testimonialsTimer = null;
+
+function loadTestimonials() {
+  const input = $("#testimonialSearch");
+  if (!input.dataset.wired) {
+    input.dataset.wired = "1";
+    input.addEventListener("input", () => {
+      clearTimeout(testimonialsTimer);
+      testimonialsTimer = setTimeout(() => searchTestimonials(input.value), 250);
+    });
+  }
+  searchTestimonials(input.value || "");
+}
+
+async function searchTestimonials(query) {
+  const lista = $("#testimonialList");
+  const hint = $("#testimonialsHint");
+  setBusy("#testimonialList", true);
+  try {
+    const data = await api(`/api/testimonials?q=${encodeURIComponent(query.trim())}`);
+    $("#testimonialsTotal").textContent = `${data.total_catalog} videos`;
+    const q = (query || "").trim();
+    if (!q) {
+      hint.hidden = false;
+      hint.textContent = `Hay ${data.total_catalog} testimonios en el catálogo. Escribe un padecimiento o una palabra para filtrarlos.`;
+    } else if (data.count === 0) {
+      hint.hidden = false;
+      hint.textContent = `No encontramos testimonios para “${q}”. Prueba con otra palabra o un padecimiento más general.`;
+    } else {
+      hint.hidden = false;
+      hint.textContent = `${data.count}${data.count >= 60 ? "+" : ""} ${data.count === 1 ? "testimonio" : "testimonios"} para “${q}”.`;
+    }
+    lista.innerHTML = data.results.map(testimonialCard).join("");
+  } catch (error) {
+    lista.innerHTML = `<p class="empty-state">No pudimos cargar los testimonios. ${escapeHtml(error.message)}</p>`;
+  } finally { setBusy("#testimonialList", false); }
+}
+
+function testimonialCard(t) {
+  const categoria = t.category && t.category !== "(raíz)" ? t.category : "General";
+  const titulo = t.name.replace(/\.(webm|mkv|mp4|mov|avi)$/i, "");
+  return `<article class="testimonial-card">
+    <span class="testimonial-icon">▶</span>
+    <div class="testimonial-body">
+      <strong>${escapeHtml(titulo)}</strong>
+      <span class="testimonial-cat">${escapeHtml(categoria)}</span>
+    </div>
+    <a class="primary-button tiny" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Ver video →</a>
+  </article>`;
 }
 
 // --- Captura por QR ---------------------------------------------------------

@@ -58,6 +58,7 @@
         <button class="nav-item" data-view="measure"><span>↗</span> Medir avances</button>
         <button class="nav-item" data-view="profile"><span>✣</span> Mi brújula</button>
         <button class="nav-item" data-view="development"><span>♢</span> Desarrollo</button>
+        <button class="nav-item" data-view="testimonios"><span>▶</span> Testimonios</button>
         <button class="nav-item nav-guide" data-view="guide"><span>?</span> Guía interactiva</button>
       </nav>
       <div class="sidebar-quest">
@@ -276,6 +277,18 @@
         <div class="learning-hero"><div><span class="chapter-pill">SIGUIENTE LECCIÓN</span><h3>El poder de una buena pregunta</h3><p>Aprende a escuchar antes de ofrecer una solución.</p><button class="light-button">Continuar aprendizaje →</button></div><span class="learning-orb">🎧</span></div>
         <div class="learning-grid" id="developmentGrid"></div>
         <article class="panel growth-note"><span>🌱</span><div><small>RECORDATORIO DE CRECIMIENTO</small><h3>No necesitas cambiar quién eres.</h3><p>Necesitas una estrategia que aproveche tus fortalezas.</p></div></article>
+      </section>
+
+      <section class="view" id="view-testimonios">
+        <div class="page-intro">
+          <div><span class="mini-kicker">RESPALDO EN VIDEO</span><h2>Testimonios</h2><p>Busca por padecimiento o palabra y comparte el testimonio que lo respalda.</p></div>
+          <span class="soft-chip" id="testimonialsTotal">0 videos</span>
+        </div>
+        <article class="panel testimonials-panel">
+          <label class="search-box big-search"><span>⌕</span><input id="testimonialSearch" type="search" placeholder="Ej. diabetes, gota, cáncer de mama, dolor de rodilla..." autocomplete="off"></label>
+          <p class="testimonials-hint" id="testimonialsHint">Escribe un padecimiento o una palabra para encontrar los videos que hablan de eso.</p>
+          <div class="testimonial-list" id="testimonialList"></div>
+        </article>
       </section>
 
       <section class="view" id="view-guide">
