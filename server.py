@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import calendar
+import functools
 import hashlib
 import io
 import json
@@ -22,6 +23,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import frases
+import sinonimos
 
 
 ROOT = Path(__file__).resolve().parent
@@ -36,6 +38,45 @@ def normalize_search(text: str) -> str:
     limpio = unicodedata.normalize("NFKD", str(text or ""))
     limpio = "".join(c for c in limpio if not unicodedata.combining(c))
     return limpio.lower().strip()
+
+
+def normalize_words(text: str) -> str:
+    """Como normalize_search, pero deja solo palabras separadas por un espacio y
+    rodeadas de espacios. Así se busca ' gota' y no se confunde con 'agotamiento'."""
+    limpio = re.sub(r"[^a-z0-9]+", " ", normalize_search(text))
+    return " " + " ".join(limpio.split()) + " "
+
+
+@functools.lru_cache(maxsize=4096)
+def _char_base(ch: str) -> str:
+    base = "".join(c for c in unicodedata.normalize("NFKD", ch) if not unicodedata.combining(c)).lower()
+    base = base[:1] if base else " "
+    return base if base.isascii() and base.isalnum() else " "
+
+
+def normalize_aligned(text: str) -> str:
+    """Normaliza letra por letra conservando la longitud, para ubicar en el texto
+    original dónde aparece una palabra buscada y recortar un fragmento."""
+    return "".join(map(_char_base, text or ""))
+
+
+# Índice de sinónimos: término normalizado -> grupos a los que pertenece.
+_SYN_GROUPS: list[list[str]] = []
+_SYN_INDEX: dict[str, set] = {}
+_SYN_DISPLAY: dict[str, str] = {}
+for _grupo in sinonimos.GRUPOS:
+    _norm = []
+    for _termino in _grupo:
+        _n = normalize_words(_termino).strip()
+        if _n and _n not in _norm:
+            _norm.append(_n)
+            _SYN_DISPLAY.setdefault(_n, _termino)
+    for _n in _norm:
+        _SYN_INDEX.setdefault(_n, set()).add(len(_SYN_GROUPS))
+    _SYN_GROUPS.append(_norm)
+_SYN_PHRASES = sorted((t for t in _SYN_INDEX if " " in t), key=lambda t: -len(t.split()))
+_STOPWORDS = {normalize_words(w).strip() for w in sinonimos.VACIAS}
+SEARCH_VERSION = "2"
 
 MAX_BODY_BYTES = 1_000_000
 
@@ -426,8 +467,14 @@ CREATE TABLE IF NOT EXISTS testimonials (
   name TEXT NOT NULL,
   drive_id TEXT NOT NULL UNIQUE,
   search_text TEXT NOT NULL DEFAULT '',
+  title_text TEXT NOT NULL DEFAULT '',
   transcript TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)""",
+    """
+CREATE TABLE IF NOT EXISTS app_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL DEFAULT ''
 )""",
 ]
 
@@ -661,6 +708,7 @@ def initialize_database() -> None:
         ensure_column(db, "daily_metrics", "client_orders", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(db, "contacts", "volume_points", "REAL NOT NULL DEFAULT 0")
         ensure_column(db, "contacts", "capture_session_id", "INTEGER")
+        ensure_column(db, "testimonials", "title_text", "TEXT NOT NULL DEFAULT ''")
         migrate_multiuser(db)
         db.execute("DELETE FROM sessions WHERE expires_at < ?", (datetime.now().isoformat(timespec="seconds"),))
         for existente in rows(db.execute("SELECT id FROM users")):
@@ -1177,13 +1225,26 @@ def ranked_profiles(db, user_id: int) -> list:
 
 
 def _testimonial_search_text(cat: str, name: str, transcript: str) -> str:
-    return normalize_search(f"{cat} {name} {transcript}")
+    return normalize_words(f"{cat} {name} {transcript}")
+
+
+def _testimonial_title_text(cat: str, name: str) -> str:
+    return normalize_words(f"{cat} {name}")
+
+
+def _meta_get(db, key: str) -> str | None:
+    fila = fetch_one(db, "SELECT value FROM app_meta WHERE key=?", (key,))
+    return fila["value"] if fila else None
+
+
+def _meta_set(db, key: str, value: str) -> None:
+    db.execute("INSERT OR REPLACE INTO app_meta (key,value) VALUES (?,?)", (key, value))
 
 
 def seed_testimonials(db) -> None:
     """Carga y mantiene el catálogo de testimonios (compartido por todos) desde el
-    archivo semilla. Siembra la tabla si está vacía e incorpora las transcripciones
-    nuevas: así un despliegue con transcripciones rellena las filas ya existentes."""
+    archivo semilla. Siembra la tabla si está vacía, incorpora transcripciones
+    nuevas y, si cambió la forma del índice de búsqueda, lo reconstruye."""
     try:
         if not TESTIMONIALS_SEED.exists():
             return
@@ -1191,12 +1252,14 @@ def seed_testimonials(db) -> None:
         ya = db.execute("SELECT COUNT(*) FROM testimonials").fetchone()[0]
         if not ya:
             db.executemany(
-                "INSERT OR IGNORE INTO testimonials (category,name,drive_id,search_text,transcript) VALUES (?,?,?,?,?)",
+                "INSERT OR IGNORE INTO testimonials (category,name,drive_id,search_text,title_text,transcript) VALUES (?,?,?,?,?,?)",
                 [(d.get("category", ""), d.get("name", ""), d.get("drive_id", ""),
-                  _testimonial_search_text(d.get("category",""), d.get("name",""), d.get("transcript","")),
+                  _testimonial_search_text(d.get("category", ""), d.get("name", ""), d.get("transcript", "")),
+                  _testimonial_title_text(d.get("category", ""), d.get("name", "")),
                   d.get("transcript", ""))
                  for d in datos if d.get("drive_id")],
             )
+            _meta_set(db, "testimonials_search_version", SEARCH_VERSION)
             print(f"  catálogo de testimonios sembrado: {len(datos)} videos")
             return
         # Backfill: rellenar transcripciones de filas que aún no la tienen.
@@ -1205,35 +1268,215 @@ def seed_testimonials(db) -> None:
         pendientes = [d for d in datos if d.get("drive_id") in faltantes and d.get("transcript")]
         if pendientes:
             db.executemany(
-                "UPDATE testimonials SET transcript=?, search_text=? WHERE drive_id=?",
+                "UPDATE testimonials SET transcript=?, search_text=?, title_text=? WHERE drive_id=?",
                 [(d["transcript"],
-                  _testimonial_search_text(d.get("category",""), d.get("name",""), d["transcript"]),
+                  _testimonial_search_text(d.get("category", ""), d.get("name", ""), d["transcript"]),
+                  _testimonial_title_text(d.get("category", ""), d.get("name", "")),
                   d["drive_id"]) for d in pendientes],
             )
             print(f"  transcripciones incorporadas: {len(pendientes)}")
+        # Reconstruir el índice completo cuando cambia su formato.
+        if _meta_get(db, "testimonials_search_version") != SEARCH_VERSION:
+            filas = rows(db.execute("SELECT drive_id, category, name, transcript FROM testimonials"))
+            db.executemany(
+                "UPDATE testimonials SET search_text=?, title_text=? WHERE drive_id=?",
+                [(_testimonial_search_text(f["category"], f["name"], f["transcript"]),
+                  _testimonial_title_text(f["category"], f["name"]), f["drive_id"]) for f in filas],
+            )
+            _meta_set(db, "testimonials_search_version", SEARCH_VERSION)
+            print(f"  índice de búsqueda de testimonios reconstruido: {len(filas)} videos")
     except Exception as exc:
         print(f"  aviso: no se pudo sembrar/actualizar testimonios ({exc})")
 
 
-def search_testimonials(db, query: str, limit: int = 60) -> dict:
-    """Busca testimonios por categoría, nombre y transcripción, ignorando acentos
-    y mayúsculas. Cada palabra de la búsqueda debe aparecer (AND)."""
-    terminos = [t for t in normalize_search(query).split() if t]
-    base = "SELECT id, category, name, drive_id FROM testimonials"
-    total = db.execute("SELECT COUNT(*) FROM testimonials").fetchone()[0]
-    if not terminos:
-        filas = rows(db.execute(f"{base} ORDER BY category, name LIMIT ?", (limit,)))
-    else:
-        where = " AND ".join("(search_text LIKE ? OR transcript LIKE ?)" for _ in terminos)
-        valores = []
-        for t in terminos:
-            like = f"%{t}%"
-            valores.extend([like, like])
-        filas = rows(db.execute(
-            f"{base} WHERE {where} ORDER BY category, name LIMIT ?", valores + [limit]))
+def _plural_alts(word: str) -> set:
+    """'articulaciones' también busca 'articulacion'; 'rodillas', 'rodilla'."""
+    alts = {word}
+    if len(word) > 6 and word.endswith("es"):
+        alts.add(word[:-2])
+    if len(word) > 6 and word.endswith("s"):
+        alts.add(word[:-1])
+    return alts
+
+
+def _parse_testimonial_query(query: str) -> list[dict]:
+    """Convierte la búsqueda en conceptos. Cada concepto debe aparecer (AND) y se
+    cumple con su palabra literal o con cualquiera de sus sinónimos (OR)."""
+    originales = {normalize_words(tok).strip(): tok for tok in str(query or "").split()}
+    q = normalize_words(query)
+    conceptos: list[dict] = []
+    vistos: set = set()
+    for frase in _SYN_PHRASES:
+        if f" {frase} " in q:
+            exp = {t for gi in _SYN_INDEX[frase] for t in _SYN_GROUPS[gi]}
+            conceptos.append({"literal": frase, "display": _SYN_DISPLAY.get(frase, frase),
+                              "lits": {frase}, "exp": exp})
+            vistos.add(frase)
+            q = q.replace(f" {frase} ", " ")
+    for palabra in q.split():
+        if palabra in _STOPWORDS or palabra in vistos:
+            continue
+        vistos.add(palabra)
+        lits = _plural_alts(palabra)
+        exp = set(lits)
+        for lit in lits:
+            for gi in _SYN_INDEX.get(lit, ()):
+                exp.update(_SYN_GROUPS[gi])
+        conceptos.append({"literal": palabra, "display": originales.get(palabra, palabra),
+                          "lits": lits, "exp": exp})
+    return conceptos
+
+
+def _testimonial_snippet(transcript: str, aligned: str, term: str):
+    """Fragmento del texto hablado alrededor de la palabra, ya partido en
+    antes / coincidencia / después para resaltarla sin inyectar HTML."""
+    hay = " " + aligned
+    idx = hay.find(" " + term)
+    if idx < 0 and " " in term:
+        term = term.split()[0]
+        idx = hay.find(" " + term)
+    if idx < 0:
+        return None
+    inicio, fin = idx, idx + len(term)
+    desde, hasta = max(0, inicio - 90), min(len(transcript), fin + 110)
+    if desde > 0:
+        espacio = transcript.find(" ", desde)
+        desde = espacio + 1 if 0 <= espacio < inicio else desde
+    if hasta < len(transcript):
+        espacio = transcript.rfind(" ", fin, hasta)
+        hasta = espacio if espacio > fin else hasta
+    return {"before": ("…" if desde > 0 else "") + transcript[desde:inicio],
+            "match": transcript[inicio:fin],
+            "after": transcript[fin:hasta] + ("…" if hasta < len(transcript) else "")}
+
+
+def _video_base_name(name: str) -> str:
+    return normalize_words(re.sub(r"\.(webm|mkv|mp4|mov|avi)$", "", name or "", flags=re.I))
+
+
+def _same_video(a: dict, b: dict) -> bool:
+    """Dos filas con el mismo nombre son el mismo video si alguna no tiene
+    transcripción (copia bloqueada o sin voz) o si lo que se dice se parece.
+    Si el contenido es distinto, son testimonios diferentes con nombre igual."""
+    ta, tb = a.get("transcript") or "", b.get("transcript") or ""
+    if not ta or not tb:
+        return True
+    wa, wb = set(normalize_words(ta[:2500]).split()), set(normalize_words(tb[:2500]).split())
+    return len(wa & wb) / max(1, len(wa | wb)) >= 0.45
+
+
+def _dedupe_testimonials(filas: list[dict]) -> list[dict]:
+    """El mismo video vive a veces en varias carpetas de Drive o en dos formatos:
+    mostrarlo una vez, conservando la copia que sí tiene transcripción."""
+    unicas: list[dict] = []
+    por_nombre: dict[str, list[int]] = {}
     for f in filas:
+        base = _video_base_name(f["name"])
+        duplicado = None
+        for i in por_nombre.get(base, []):
+            if _same_video(unicas[i], f):
+                duplicado = i
+                break
+        if duplicado is None:
+            por_nombre.setdefault(base, []).append(len(unicas))
+            unicas.append(f)
+        elif not (unicas[duplicado].get("transcript") or "") and (f.get("transcript") or ""):
+            unicas[duplicado] = f  # misma posición, pero con la copia transcrita
+    return unicas
+
+
+def search_testimonials(db, query: str, limit: int = 60) -> dict:
+    """Busca testimonios por categoría, nombre y lo que se dice en el video.
+    Ignora acentos y mayúsculas, busca palabras completas, entiende sinónimos
+    (sinonimos.py) y ordena por relevancia: palabra exacta en el título, luego
+    dicha en el video, luego por sinónimo."""
+    total = db.execute("SELECT COUNT(*) FROM testimonials").fetchone()[0]
+    conceptos = _parse_testimonial_query(query)
+    if not conceptos:
+        if str(query or "").strip():
+            # Solo palabras generales ("immunocal", "testimonio"): salen en casi todo.
+            return {"total_catalog": total, "count": 0, "total_matches": 0, "generic": True,
+                    "query": query, "expansions": [], "results": []}
+        filas = rows(db.execute(
+            "SELECT id, category, name, drive_id FROM testimonials ORDER BY category, name LIMIT ?", (limit,)))
+        for f in filas:
+            f.update(matched=[], snippet=None, link=f"https://drive.google.com/file/d/{f['drive_id']}/view")
+        return {"total_catalog": total, "count": len(filas), "total_matches": total,
+                "query": query, "expansions": [], "results": filas}
+
+    like = lambda t: f"% {t}%"
+    where_sql, where_params, score_sql, score_params = [], [], [], []
+    for c in conceptos:
+        lits = sorted(c["lits"])
+        sinon = sorted(t for t in c["exp"] if t not in c["lits"])
+        exp = lits + sinon
+        where_sql.append("(" + " OR ".join("search_text LIKE ?" for _ in exp) + ")")
+        where_params += [like(t) for t in exp]
+        caso = ("CASE WHEN (" + " OR ".join("title_text LIKE ?" for _ in lits) + ") THEN 4"
+                " WHEN (" + " OR ".join("search_text LIKE ?" for _ in lits) + ") THEN 3")
+        score_params += [like(t) for t in lits] * 2
+        if sinon:
+            caso += " WHEN (" + " OR ".join("title_text LIKE ?" for _ in sinon) + ") THEN 2"
+            score_params += [like(t) for t in sinon]
+        score_sql.append(caso + " ELSE 1 END")
+    where = " AND ".join(where_sql)
+    crudas = db.execute(f"SELECT COUNT(*) FROM testimonials WHERE {where}", where_params).fetchone()[0]
+    candidatas = rows(db.execute(
+        f"SELECT id, category, name, drive_id, title_text, transcript, ({' + '.join(score_sql)}) AS score "
+        f"FROM testimonials WHERE {where} ORDER BY score DESC, category, name LIMIT ?",
+        score_params + where_params + [limit + 40]))
+    unicas = _dedupe_testimonials(candidatas)
+    if crudas <= len(candidatas):
+        coincidencias = len(unicas)
+    else:
+        coincidencias = crudas - (len(candidatas) - len(unicas))
+    filas = unicas[:limit]
+
+    for f in filas:
+        titulo = f.pop("title_text") or ""
+        transcript = f.pop("transcript") or ""
+        alineado = normalize_aligned(transcript)
+        hay_video = " " + alineado
+        coincide, fragmento = [], None
+        for c in conceptos:
+            literales = [(t, True) for t in sorted(c["lits"], key=len, reverse=True)]
+            sinonimos_c = [(t, False) for t in sorted(c["exp"] - c["lits"], key=len, reverse=True)]
+            orden = literales + sinonimos_c
+            # Mismo orden que la relevancia: exacta en título, exacta en el video,
+            # sinónimo en título, sinónimo en el video.
+            hallado = None
+            for grupo, donde, texto in ((literales, "título", titulo), (literales, "video", hay_video),
+                                        (sinonimos_c, "título", titulo), (sinonimos_c, "video", hay_video)):
+                for termino, literal in grupo:
+                    if f" {termino}" in texto:
+                        hallado = (termino, literal, donde)
+                        break
+                if hallado:
+                    break
+            if not hallado:
+                continue
+            termino, literal, donde = hallado
+            coincide.append({"term": _SYN_DISPLAY.get(termino, termino) if not literal else c["display"],
+                             "synonym_of": None if literal else c["display"], "where": donde})
+            if fragmento is None and transcript:
+                # Fragmento de lo que se dice, aunque la coincidencia principal sea el título.
+                for t, es_literal in orden:
+                    if f" {t}" in hay_video:
+                        fragmento = _testimonial_snippet(transcript, alineado, t)
+                        if fragmento:
+                            fragmento["term"] = c["display"] if es_literal else _SYN_DISPLAY.get(t, t)
+                        break
+        f["matched"] = coincide
+        f["snippet"] = fragmento
         f["link"] = f"https://drive.google.com/file/d/{f['drive_id']}/view"
-    return {"total_catalog": total, "count": len(filas), "query": query, "results": filas}
+
+    expansiones = []
+    for c in conceptos:
+        otros = [_SYN_DISPLAY.get(t, t) for t in sorted(c["exp"] - c["lits"])]
+        if otros:
+            expansiones.append({"term": c["display"], "synonyms": otros})
+    return {"total_catalog": total, "count": len(filas), "total_matches": coincidencias,
+            "query": query, "expansions": expansiones, "results": filas}
 
 
 def followup_alerts(db, user_id: int, upcoming_days: int = 7) -> dict:

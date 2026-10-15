@@ -1092,6 +1092,7 @@ async function deleteFollowup(followupId) {
 // --- Testimonios en video (catálogo) ----------------------------------------
 
 let testimonialsTimer = null;
+let testimonialsSeq = 0;
 
 function loadTestimonials() {
   const input = $("#testimonialSearch");
@@ -1108,35 +1109,50 @@ function loadTestimonials() {
 async function searchTestimonials(query) {
   const lista = $("#testimonialList");
   const hint = $("#testimonialsHint");
+  // Si llega tarde la respuesta de una búsqueda anterior, no debe pisar la actual.
+  const seq = ++testimonialsSeq;
   setBusy("#testimonialList", true);
   try {
     const data = await api(`/api/testimonials?q=${encodeURIComponent(query.trim())}`);
+    if (seq !== testimonialsSeq) return;
     $("#testimonialsTotal").textContent = `${data.total_catalog} videos`;
     const q = (query || "").trim();
+    hint.hidden = false;
     if (!q) {
-      hint.hidden = false;
       hint.textContent = `Hay ${data.total_catalog} testimonios en el catálogo. Escribe un padecimiento o una palabra para filtrarlos.`;
+    } else if (data.generic) {
+      hint.textContent = `“${q}” aparece en casi todos los videos. Agrega un padecimiento o algo más específico, por ejemplo “diabetes” o “dolor de rodilla”.`;
     } else if (data.count === 0) {
-      hint.hidden = false;
       hint.textContent = `No encontramos testimonios para “${q}”. Prueba con otra palabra o un padecimiento más general.`;
     } else {
-      hint.hidden = false;
-      hint.textContent = `${data.count}${data.count >= 60 ? "+" : ""} ${data.count === 1 ? "testimonio" : "testimonios"} para “${q}”.`;
+      const total = data.total_matches ?? data.count;
+      const mostrados = data.count < total ? ` Te muestro los ${data.count} más relevantes.` : "";
+      const sinonimos = (data.expansions || []).map((e) => e.synonyms.slice(0, 5).join(", ")).filter(Boolean);
+      const extra = sinonimos.length ? ` También busqué: ${sinonimos.join(" · ")}.` : "";
+      hint.textContent = `${total} ${total === 1 ? "testimonio" : "testimonios"} para “${q}”.${mostrados}${extra}`;
     }
     lista.innerHTML = data.results.map(testimonialCard).join("");
   } catch (error) {
+    if (seq !== testimonialsSeq) return;
     lista.innerHTML = `<p class="empty-state">No pudimos cargar los testimonios. ${escapeHtml(error.message)}</p>`;
-  } finally { setBusy("#testimonialList", false); }
+  } finally { if (seq === testimonialsSeq) setBusy("#testimonialList", false); }
 }
 
 function testimonialCard(t) {
   const categoria = t.category && t.category !== "(raíz)" ? t.category : "General";
   const titulo = t.name.replace(/\.(webm|mkv|mp4|mov|avi)$/i, "");
+  const coincide = (t.matched || []).map((m) => {
+    const motivo = m.synonym_of ? `${m.term} (por “${m.synonym_of}”)` : m.term;
+    return `<span class="match-chip ${m.where === "video" ? "match-video" : "match-title"}" title="${m.where === "video" ? "Lo dice en el video" : "Está en el título"}">${m.where === "video" ? "🎙" : "🏷"} ${escapeHtml(motivo)}</span>`;
+  }).join("");
+  const s = t.snippet;
+  const fragmento = s ? `<p class="testimonial-snippet"><small>Lo dice en el video:</small> “${escapeHtml(s.before)}<mark>${escapeHtml(s.match)}</mark>${escapeHtml(s.after)}”</p>` : "";
   return `<article class="testimonial-card">
     <span class="testimonial-icon">▶</span>
     <div class="testimonial-body">
       <strong>${escapeHtml(titulo)}</strong>
-      <span class="testimonial-cat">${escapeHtml(categoria)}</span>
+      <div class="testimonial-tags"><span class="testimonial-cat">${escapeHtml(categoria)}</span>${coincide}</div>
+      ${fragmento}
     </div>
     <a class="primary-button tiny" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Ver video →</a>
   </article>`;

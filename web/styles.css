@@ -603,3 +603,18 @@ button:disabled { opacity:.6; cursor:not-allowed; }
   .testimonial-icon { width: 36px; height: 36px; }
   .testimonial-card .primary-button.tiny { grid-column: 2; justify-self: start; margin-top: 2px; }
 }
+
+/* --- Testimonios: por qué coincide y qué dice --- */
+.testimonial-card { align-items: start; }
+.testimonial-card .primary-button.tiny { align-self: center; }
+.testimonial-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.testimonial-tags .testimonial-cat { margin-top: 0; }
+.match-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 800; }
+.match-title { background: var(--blue-soft); color: var(--blue); }
+.match-video { background: var(--green-soft); color: var(--green); }
+.testimonial-snippet { margin: 8px 0 0; padding: 8px 11px; border-left: 3px solid var(--green); border-radius: 0 10px 10px 0; background: #f7fbf7; color: #44506e; font-size: 12px; line-height: 1.5; }
+.testimonial-snippet small { display: block; margin-bottom: 2px; color: var(--green); font-size: 9px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.testimonial-snippet mark { background: #fff1b8; color: var(--navy-900); padding: 0 2px; border-radius: 3px; font-weight: 800; }
+@media (max-width: 700px) {
+  .testimonial-card .primary-button.tiny { align-self: start; }
+}
