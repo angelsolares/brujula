@@ -1102,6 +1102,10 @@ function loadTestimonials() {
       clearTimeout(testimonialsTimer);
       testimonialsTimer = setTimeout(() => searchTestimonials(input.value), 250);
     });
+    $("#testimonialList").addEventListener("click", (event) => {
+      const boton = event.target.closest("[data-copy-text]");
+      if (boton) copyTestimonialLink(boton);
+    });
   }
   searchTestimonials(input.value || "");
 }
@@ -1147,6 +1151,9 @@ function testimonialCard(t) {
   }).join("");
   const s = t.snippet;
   const fragmento = s ? `<p class="testimonial-snippet"><small>Lo dice en el video:</small> “${escapeHtml(s.before)}<mark>${escapeHtml(s.match)}</mark>${escapeHtml(s.after)}”</p>` : "";
+  // Mensaje listo para WhatsApp: la persona solo elige a quién mandarlo.
+  const mensaje = `Te comparto este testimonio: ${titulo}\n${t.link}`;
+  const whatsapp = `https://wa.me/?text=${encodeURIComponent(mensaje)}`;
   return `<article class="testimonial-card">
     <span class="testimonial-icon">▶</span>
     <div class="testimonial-body">
@@ -1154,8 +1161,43 @@ function testimonialCard(t) {
       <div class="testimonial-tags"><span class="testimonial-cat">${escapeHtml(categoria)}</span>${coincide}</div>
       ${fragmento}
     </div>
-    <a class="primary-button tiny" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Ver video →</a>
+    <div class="testimonial-actions">
+      <a class="primary-button tiny" href="${escapeHtml(t.link)}" target="_blank" rel="noopener">Ver video →</a>
+      <a class="whatsapp-button" href="${escapeHtml(whatsapp)}" target="_blank" rel="noopener" aria-label="Enviar ${escapeHtml(titulo)} por WhatsApp">WhatsApp</a>
+      <button type="button" class="copy-link-button" data-copy-text="${escapeHtml(mensaje)}" aria-label="Copiar enlace de ${escapeHtml(titulo)}">Copiar enlace</button>
+    </div>
   </article>`;
+}
+
+function copyWithTextarea(texto) {
+  // Respaldo para navegadores que no permiten el portapapeles moderno.
+  const area = document.createElement("textarea");
+  area.value = texto; area.setAttribute("readonly", "");
+  area.style.position = "fixed"; area.style.top = "0"; area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select(); area.setSelectionRange(0, texto.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
+  area.remove();
+  return ok;
+}
+
+async function copyTestimonialLink(boton) {
+  const texto = boton.dataset.copyText || "";
+  let ok = false;
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(texto); ok = true; } catch (_) { ok = false; }
+  }
+  if (!ok) ok = copyWithTextarea(texto);
+  if (!ok) {
+    toast("No pude copiar el enlace en este navegador. Usa el botón de WhatsApp o mantén presionado “Ver video”.", "error");
+    return;
+  }
+  const original = boton.textContent;
+  boton.textContent = "¡Copiado!";
+  boton.classList.add("copied");
+  setTimeout(() => { boton.textContent = original; boton.classList.remove("copied"); }, 1600);
+  toast("Enlace copiado: pégalo donde quieras compartirlo", "success");
 }
 
 // --- Captura por QR ---------------------------------------------------------
