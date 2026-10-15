@@ -1176,23 +1176,43 @@ def ranked_profiles(db, user_id: int) -> list:
     return rows(db.execute(PROFILE_RANKING_SQL, (user_id,)))
 
 
+def _testimonial_search_text(cat: str, name: str, transcript: str) -> str:
+    return normalize_search(f"{cat} {name} {transcript}")
+
+
 def seed_testimonials(db) -> None:
-    """Carga el catálogo de testimonios en video (compartido por todos) desde el
-    archivo semilla, solo si la tabla está vacía. Idempotente por drive_id."""
+    """Carga y mantiene el catálogo de testimonios (compartido por todos) desde el
+    archivo semilla. Siembra la tabla si está vacía e incorpora las transcripciones
+    nuevas: así un despliegue con transcripciones rellena las filas ya existentes."""
     try:
-        ya = db.execute("SELECT COUNT(*) FROM testimonials").fetchone()[0]
-        if ya or not TESTIMONIALS_SEED.exists():
+        if not TESTIMONIALS_SEED.exists():
             return
         datos = json.loads(TESTIMONIALS_SEED.read_text(encoding="utf-8"))
-        db.executemany(
-            "INSERT OR IGNORE INTO testimonials (category,name,drive_id,search_text) VALUES (?,?,?,?)",
-            [(d.get("category", ""), d.get("name", ""), d.get("drive_id", ""),
-              normalize_search(f"{d.get('category','')} {d.get('name','')}"))
-             for d in datos if d.get("drive_id")],
-        )
-        print(f"  catálogo de testimonios sembrado: {len(datos)} videos")
+        ya = db.execute("SELECT COUNT(*) FROM testimonials").fetchone()[0]
+        if not ya:
+            db.executemany(
+                "INSERT OR IGNORE INTO testimonials (category,name,drive_id,search_text,transcript) VALUES (?,?,?,?,?)",
+                [(d.get("category", ""), d.get("name", ""), d.get("drive_id", ""),
+                  _testimonial_search_text(d.get("category",""), d.get("name",""), d.get("transcript","")),
+                  d.get("transcript", ""))
+                 for d in datos if d.get("drive_id")],
+            )
+            print(f"  catálogo de testimonios sembrado: {len(datos)} videos")
+            return
+        # Backfill: rellenar transcripciones de filas que aún no la tienen.
+        faltantes = {r["drive_id"] for r in rows(db.execute(
+            "SELECT drive_id FROM testimonials WHERE COALESCE(TRIM(transcript),'')=''"))}
+        pendientes = [d for d in datos if d.get("drive_id") in faltantes and d.get("transcript")]
+        if pendientes:
+            db.executemany(
+                "UPDATE testimonials SET transcript=?, search_text=? WHERE drive_id=?",
+                [(d["transcript"],
+                  _testimonial_search_text(d.get("category",""), d.get("name",""), d["transcript"]),
+                  d["drive_id"]) for d in pendientes],
+            )
+            print(f"  transcripciones incorporadas: {len(pendientes)}")
     except Exception as exc:
-        print(f"  aviso: no se pudo sembrar testimonios ({exc})")
+        print(f"  aviso: no se pudo sembrar/actualizar testimonios ({exc})")
 
 
 def search_testimonials(db, query: str, limit: int = 60) -> dict:
