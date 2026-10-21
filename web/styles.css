@@ -633,3 +633,32 @@ button:disabled { opacity:.6; cursor:not-allowed; }
   .testimonial-actions { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-self: start; min-width: 0; }
   .testimonial-actions > * { flex: 1 1 auto; }
 }
+
+/* --- Avisos: ventana de pendientes y recordatorio --- */
+.modal-shell { padding: 27px; }
+.pending-modal { width: min(560px, calc(100% - 30px)); }
+.reminder-modal { width: min(460px, calc(100% - 30px)); border-top: 6px solid var(--pink); }
+.pending-block { margin-top: 18px; }
+.pending-block h3 { margin: 0 0 9px; font-size: 13px; color: var(--navy-900); }
+.pending-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 34vh; overflow: auto; }
+.pending-item { display: grid; grid-template-columns: 34px 1fr auto; gap: 11px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 13px; background: #fff; }
+.pending-item.is-overdue { background: #fff5f8; border-color: #f6cdd9; }
+.pending-item.is-done { opacity: .5; text-decoration: line-through; }
+.pending-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--blue-soft); font-size: 15px; }
+.pending-item.is-overdue .pending-icon { background: #ffe1ea; }
+.pending-item strong { display: block; font-size: 13px; color: var(--navy-900); }
+.pending-item small { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
+.pending-item .row-action { width: 34px; height: 34px; }
+.pending-notify { margin-top: 16px; padding: 12px 14px; border-radius: 13px; background: var(--purple-soft); display: grid; gap: 9px; }
+.pending-notify p { margin: 0; font-size: 12px; color: #4b4270; line-height: 1.5; }
+.pending-notify .ghost-pill { justify-self: start; }
+.reminder-list { margin-top: 16px; }
+@media (max-width: 700px) {
+  .modal-shell { padding: 20px; }
+  .pending-modal .modal-actions, .reminder-modal .modal-actions { flex-direction: column-reverse; }
+  .pending-modal .modal-actions > *, .reminder-modal .modal-actions > * { width: 100%; }
+}
+@media (max-width: 700px) {
+  .pending-list { max-height: 24vh; }
+  .pending-block { margin-top: 14px; }
+}

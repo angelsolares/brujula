@@ -53,7 +53,7 @@
       <nav class="nav-list">
         <button class="nav-item active" data-view="dashboard"><span>⌂</span> Mi tablero</button>
         <button class="nav-item" data-view="contacts"><span>♙</span> Mi red <b id="navContactCount">0</b><i class="nav-alert-badge" id="navAlertBadge" hidden title="Seguimientos pendientes"></i></button>
-        <button class="nav-item" data-view="agenda"><span>✓</span> Agenda de hoy</button>
+        <button class="nav-item" data-view="agenda"><span>✓</span> Agenda de hoy<i class="nav-alert-badge" id="navTaskBadge" hidden title="Actividades pendientes"></i></button>
         <button class="nav-item" data-view="map"><span>⌁</span> Mi mapa</button>
         <button class="nav-item" data-view="measure"><span>↗</span> Medir avances</button>
         <button class="nav-item" data-view="profile"><span>✣</span> Mi brújula</button>
@@ -529,6 +529,39 @@
       </div>
       <div class="modal-actions"><button type="button" class="secondary-button" data-close-password>Ahora no</button><button type="submit" class="primary-button" id="passwordSubmit">Guardar contraseña</button></div>
     </form>
+  </dialog>
+
+  <dialog id="pendingDialog" class="modal pending-modal" aria-labelledby="pendingTitle">
+    <div class="modal-shell">
+      <div class="modal-head"><div><span class="mini-kicker">AVISOS DE HOY</span><h2 id="pendingTitle">Tienes pendientes</h2><p id="pendingSummary"></p></div><button type="button" data-close-pending aria-label="Cerrar">×</button></div>
+      <section class="pending-block" id="pendingTasksBlock" hidden>
+        <h3>Actividades de tu agenda</h3>
+        <ul class="pending-list" id="pendingTasks"></ul>
+      </section>
+      <section class="pending-block" id="pendingFollowupsBlock" hidden>
+        <h3>Personas que esperan tu seguimiento</h3>
+        <ul class="pending-list" id="pendingFollowups"></ul>
+      </section>
+      <div class="pending-notify" id="pendingNotify" hidden>
+        <p id="pendingNotifyText">Activa los avisos para que este dispositivo te recuerde cada actividad a su hora.</p>
+        <button type="button" class="ghost-pill" id="pendingNotifyButton">🔔 Activar avisos</button>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" id="pendingSnooze">No mostrar más hoy</button>
+        <button type="button" class="primary-button" id="pendingGoAgenda">Ver mi agenda</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="reminderDialog" class="modal reminder-modal" aria-labelledby="reminderTitle">
+    <div class="modal-shell">
+      <div class="modal-head"><div><span class="mini-kicker" id="reminderKicker">RECORDATORIO</span><h2 id="reminderTitle">Es hora de tu actividad</h2></div><button type="button" data-close-reminder aria-label="Cerrar">×</button></div>
+      <ul class="pending-list reminder-list" id="reminderList"></ul>
+      <div class="modal-actions">
+        <button type="button" class="secondary-button" data-close-reminder>Cerrar</button>
+        <button type="button" class="primary-button" id="reminderGoAgenda">Ver mi agenda</button>
+      </div>
+    </div>
   </dialog>
 
   <dialog id="confirmDialog" class="modal confirm-modal">

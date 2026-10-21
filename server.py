@@ -91,7 +91,7 @@ LOGIN_RATE_WINDOW = 600
 VALID_ROLES = {"admin", "consultor"}
 
 # Rutas que funcionan sin haber iniciado sesión.
-PUBLIC_PATHS = {"/login", "/login.html", "/api/auth/login", "/api/health", "/manifest.webmanifest"}
+PUBLIC_PATHS = {"/login", "/login.html", "/api/auth/login", "/api/health", "/manifest.webmanifest", "/sw.js"}
 PUBLIC_PREFIXES = ("/captura/", "/api/captura/", "/assets/", "/styles.css", "/favicon")
 
 
@@ -1502,12 +1502,26 @@ def followup_alerts(db, user_id: int, upcoming_days: int = 7) -> dict:
         elif fecha <= limite:
             persona["bucket"] = "upcoming"
             upcoming.append(persona)
+    # Actividades de la agenda sin completar: las de hoy y las atrasadas (hasta 30
+    # días, para que una misión vieja olvidada no se quede en el aviso para siempre).
+    tareas = rows(db.execute(
+        """SELECT t.id, t.title, t.detail, t.category, t.due_date, t.due_time, t.contact_id,
+                  c.name AS contact_name
+           FROM tasks t LEFT JOIN contacts c ON c.id = t.contact_id
+           WHERE t.user_id=? AND t.completed=0 AND t.due_date<=? AND t.due_date>=?
+           ORDER BY t.due_date, COALESCE(NULLIF(t.due_time,''),'99:99')""",
+        (user_id, hoy, day_offset(-30))))
+    tareas_atrasadas = [t for t in tareas if t["due_date"] < hoy]
+    tareas_hoy = [t for t in tareas if t["due_date"] == hoy]
     return {
         "overdue": overdue,
         "today": due_today,
         "upcoming": upcoming,
         "counts": {"overdue": len(overdue), "today": len(due_today), "upcoming": len(upcoming)},
         "pending": len(overdue) + len(due_today),
+        "tasks_overdue": tareas_atrasadas,
+        "tasks_today": tareas_hoy,
+        "pending_tasks": len(tareas_atrasadas) + len(tareas_hoy),
     }
 
 

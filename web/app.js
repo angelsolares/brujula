@@ -938,6 +938,17 @@ function followupAlertItem(person) {
 
 function renderFollowupAlerts(alerts) {
   state.alerts = alerts || null;
+  const badgeAgenda = $("#navTaskBadge");
+  if (badgeAgenda) {
+    const pendientesAgenda = alerts?.pending_tasks || 0;
+    badgeAgenda.hidden = pendientesAgenda === 0;
+    badgeAgenda.textContent = pendientesAgenda;
+  }
+  if (alerts) {
+    maybeShowPendingPopup(alerts);
+    checkTaskReminders();
+    maybeNotify(alerts);
+  }
   const badge = $("#navAlertBadge");
   const panel = $("#followupAlertsPanel");
   if (!alerts) { if (panel) panel.hidden = true; if (badge) badge.hidden = true; return; }
@@ -970,7 +981,6 @@ function renderFollowupAlerts(alerts) {
   $$("[data-followup-open]").forEach((b) => b.addEventListener("click", () => openContactDialog(Number(b.dataset.followupOpen), true)));
   $$("[data-followup-snooze]").forEach((b) => b.addEventListener("click", () => postponeAlert(Number(b.dataset.followupSnooze))));
   setupNotifyButton();
-  maybeNotify(alerts);
 }
 
 async function postponeAlert(contactId) {
@@ -983,37 +993,259 @@ async function postponeAlert(contactId) {
   } catch (error) { toast(error.message, "error"); }
 }
 
-// Avisos del navegador: solo mientras la app está abierta, una vez por día.
-function setupNotifyButton() {
-  const boton = $("#followupNotifyButton");
-  if (!boton || !("Notification" in window)) return;
-  const pendientes = state.alerts?.pending || 0;
-  boton.hidden = !(pendientes > 0 && Notification.permission === "default");
-  if (!boton.dataset.wired) {
-    boton.dataset.wired = "1";
-    boton.addEventListener("click", async () => {
-      try {
-        const permiso = await Notification.requestPermission();
-        if (permiso === "granted") { toast("Listo, te avisaré de tus seguimientos", "success"); maybeNotify(state.alerts, true); }
-        setupNotifyButton();
-      } catch (_) { /* algunos navegadores lo bloquean en silencio */ }
-    });
+// --- Avisos: ventana de pendientes, recordatorios y avisos del sistema -------
+// Todo funciona mientras BRÚJULA está abierta (en pantalla o en segundo plano en
+// el navegador). Los avisos con la app cerrada requerirían un servidor de push.
+
+const AVISO_ANTICIPO_MIN = 10;  // recordar cada actividad 10 minutos antes de su hora
+let swRegistro = null;
+let pendientesMostradoEn = 0;
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  try { swRegistro = await navigator.serviceWorker.register("/sw.js"); } catch (_) { swRegistro = null; }
+}
+
+const esIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const appInstalada = () => (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+
+function notifyState() {
+  if (!("Notification" in window)) return esIOS() && !appInstalada() ? "ios-sin-instalar" : "no-soportado";
+  return Notification.permission; // granted | denied | default
+}
+
+async function requestNotifyPermission() {
+  try {
+    const permiso = await Notification.requestPermission();
+    if (permiso === "granted") {
+      toast("Listo: este dispositivo te avisará de tus actividades y seguimientos", "success");
+      systemNotify("BRÚJULA · Avisos activados", "Así se verán tus recordatorios.", { tag: "brujula-prueba" });
+    } else if (permiso === "denied") {
+      toast("Los avisos quedaron bloqueados. Puedes activarlos en los permisos del navegador.", "error");
+    }
+  } catch (_) { /* algunos navegadores lo bloquean en silencio */ }
+  renderNotifyHints();
+}
+
+// Android solo acepta avisos desde el service worker; en escritorio sirve el método directo.
+async function systemNotify(titulo, cuerpo, { tag = "brujula", url = "/" } = {}) {
+  if (notifyState() !== "granted") return false;
+  const opciones = { body: cuerpo, icon: "/assets/app-icon-192.png", badge: "/assets/app-icon-192.png", tag, renotify: true, data: { url } };
+  try {
+    const reg = swRegistro || (navigator.serviceWorker ? await navigator.serviceWorker.getRegistration() : null);
+    if (reg) { await reg.showNotification(titulo, opciones); return true; }
+  } catch (_) { /* seguimos con el método de escritorio */ }
+  try {
+    const n = new Notification(titulo, opciones);
+    n.onclick = () => { window.focus(); const vista = url.split("#")[1]; if (vista) goToView(vista); n.close(); };
+    return true;
+  } catch (_) { return false; }
+}
+
+// Botón y texto para activar avisos, según lo que permita cada dispositivo.
+function renderNotifyHints() {
+  const estado = notifyState();
+  const botonPanel = $("#followupNotifyButton");
+  if (botonPanel) botonPanel.hidden = estado !== "default";
+  const caja = $("#pendingNotify");
+  if (!caja) return;
+  const texto = $("#pendingNotifyText");
+  const boton = $("#pendingNotifyButton");
+  caja.hidden = false;
+  boton.hidden = estado !== "default";
+  if (estado === "default") {
+    texto.textContent = "Activa los avisos para que este dispositivo te recuerde cada actividad a su hora mientras BRÚJULA esté abierta.";
+  } else if (estado === "ios-sin-instalar") {
+    texto.textContent = "En iPhone los avisos funcionan con BRÚJULA instalada en tu pantalla de inicio: botón Compartir y luego “Agregar a pantalla de inicio”.";
+  } else if (estado === "denied") {
+    texto.textContent = "Los avisos de este dispositivo están bloqueados. Puedes activarlos en los permisos del navegador para este sitio.";
+  } else {
+    caja.hidden = true;
   }
 }
 
+function setupNotifyButton() {
+  const boton = $("#followupNotifyButton");
+  if (boton && !boton.dataset.wired) {
+    boton.dataset.wired = "1";
+    boton.addEventListener("click", requestNotifyPermission);
+  }
+  renderNotifyHints();
+}
+
+function resumenPendientes(alerts) {
+  const partes = [];
+  const hoy = alerts.tasks_today?.length || 0;
+  const atrasadas = alerts.tasks_overdue?.length || 0;
+  if (hoy) partes.push(`${hoy} actividad${hoy === 1 ? "" : "es"} para hoy`);
+  if (atrasadas) partes.push(`${atrasadas} actividad${atrasadas === 1 ? "" : "es"} atrasada${atrasadas === 1 ? "" : "s"}`);
+  if (alerts.pending) partes.push(`${alerts.pending} seguimiento${alerts.pending === 1 ? "" : "s"} pendiente${alerts.pending === 1 ? "" : "s"}`);
+  return partes.length ? `${partes.join(", ")}.` : "Sin pendientes.";
+}
+
+// Resumen del día como aviso del sistema, una vez por día.
 function maybeNotify(alerts, force = false) {
-  if (!alerts || !("Notification" in window) || Notification.permission !== "granted") return;
-  if (!alerts.pending) return;
+  if (!alerts || notifyState() !== "granted") return;
+  if (!((alerts.pending || 0) + (alerts.pending_tasks || 0))) return;
   const marca = isoDate();
   if (!force) { try { if (localStorage.getItem("brujula_notify_day") === marca) return; } catch (_) {} }
   try { localStorage.setItem("brujula_notify_day", marca); } catch (_) {}
-  const cuerpo = alerts.counts.overdue
-    ? `${alerts.counts.overdue} atrasado${alerts.counts.overdue === 1 ? "" : "s"} y ${alerts.counts.today} para hoy.`
-    : `${alerts.counts.today} para hoy.`;
+  systemNotify("BRÚJULA · Tus pendientes de hoy", resumenPendientes(alerts), { tag: "brujula-resumen", url: "/#agenda" });
+}
+
+const horaLegible = (hhmm) => (hhmm ? String(hhmm).slice(0, 5) : "Sin hora");
+
+function pendingTaskItem(t) {
+  const atrasada = t.due_date < isoDate();
+  const cuando = atrasada ? `${shortDate(t.due_date)} · atrasada` : (t.due_time ? `Hoy a las ${horaLegible(t.due_time)}` : "Hoy");
+  const quien = t.contact_name ? ` · con ${t.contact_name}` : "";
+  return `<li class="pending-item${atrasada ? " is-overdue" : ""}">
+    <span class="pending-icon">${atrasada ? "⏰" : "✓"}</span>
+    <div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(cuando + quien)}</small></div>
+    <button type="button" class="row-action" data-pending-done="${t.id}" title="Marcar como hecha" aria-label="Marcar ${escapeHtml(t.title)} como hecha">✓</button>
+  </li>`;
+}
+
+function pendingFollowupItem(p) {
+  const atrasado = p.bucket === "overdue";
+  return `<li class="pending-item${atrasado ? " is-overdue" : ""}">
+    <span class="pending-icon">${atrasado ? "⏰" : "☎"}</span>
+    <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(`${p.next_action || "Definir siguiente paso"} · ${relativeDay(p.next_action_date)}`)}</small></div>
+    <button type="button" class="row-action" data-pending-contact="${p.id}" title="Registrar seguimiento" aria-label="Registrar seguimiento de ${escapeHtml(p.name)}">→</button>
+  </li>`;
+}
+
+function showPendingPopup(alerts) {
+  const dlg = $("#pendingDialog");
+  if (!dlg || !alerts) return;
+  // Primero lo de hoy con su hora; después lo que quedó atrasado.
+  const tareas = [...(alerts.tasks_today || []), ...(alerts.tasks_overdue || [])];
+  const seguimientos = [...(alerts.overdue || []), ...(alerts.today || [])];
+  const total = tareas.length + seguimientos.length;
+  if (!total) return;
+  $("#pendingTitle").textContent = `Tienes ${total} pendiente${total === 1 ? "" : "s"}`;
+  $("#pendingSummary").textContent = resumenPendientes(alerts);
+  $("#pendingTasksBlock").hidden = !tareas.length;
+  $("#pendingTasks").innerHTML = tareas.map(pendingTaskItem).join("");
+  $("#pendingFollowupsBlock").hidden = !seguimientos.length;
+  $("#pendingFollowups").innerHTML = seguimientos.map(pendingFollowupItem).join("");
+  renderNotifyHints();
+  pendientesMostradoEn = Date.now();
+  if (!dlg.open) dlg.showModal();
+}
+
+// Sale al abrir la app y, mientras siga abierta, como mucho cada 30 minutos.
+function maybeShowPendingPopup(alerts) {
+  if (!alerts || !((alerts.pending || 0) + (alerts.pending_tasks || 0))) return;
+  try { if (localStorage.getItem("brujula_pending_snooze") === isoDate()) return; } catch (_) {}
+  if (document.querySelector("dialog[open]")) return; // no encimar sobre otra ventana
+  if (pendientesMostradoEn && Date.now() - pendientesMostradoEn < 30 * 60 * 1000) return;
+  showPendingPopup(alerts);
+}
+
+function recordados() {
+  try { return JSON.parse(localStorage.getItem("brujula_recordados") || "{}"); } catch (_) { return {}; }
+}
+
+function marcarRecordado(clave) {
+  const r = recordados();
+  r[clave] = Date.now();
+  for (const k of Object.keys(r)) if (Date.now() - r[k] > 2 * 86400000) delete r[k];
+  try { localStorage.setItem("brujula_recordados", JSON.stringify(r)); } catch (_) {}
+}
+
+// Recordatorio a la hora: 10 minutos antes (o al abrir, si ya empezó hace menos de una hora).
+function checkTaskReminders() {
+  const tareas = (state.alerts?.tasks_today || []).filter((t) => t.due_time);
+  if (!tareas.length) return;
+  // No interrumpir otra ventana (pendientes, editar un contacto…): se avisa en la siguiente revisión.
+  const abierta = document.querySelector("dialog[open]");
+  if (abierta && abierta.id !== "reminderDialog") return;
+  const ahora = new Date();
+  const hoy = isoDate();
+  const yaRecordadas = recordados();
+  const tocan = [];
+  for (const t of tareas) {
+    const [h, m] = String(t.due_time).split(":").map(Number);
+    const hora = new Date(ahora);
+    hora.setHours(h, m || 0, 0, 0);
+    const minutos = (hora - ahora) / 60000;
+    const clave = `${t.id}:${hoy}:${t.due_time}`;
+    if (minutos <= AVISO_ANTICIPO_MIN && minutos > -60 && !yaRecordadas[clave]) tocan.push({ ...t, minutos, clave });
+  }
+  if (!tocan.length) return;
+  tocan.forEach((t) => marcarRecordado(t.clave));
+  showReminder(tocan);
+  for (const t of tocan) {
+    const cuando = t.minutos > 1 ? `En ${Math.round(t.minutos)} minutos` : t.minutos >= -1 ? "Es hora" : `Era a las ${horaLegible(t.due_time)}`;
+    const cuerpo = [t.detail, t.contact_name ? `Con ${t.contact_name}` : ""].filter(Boolean).join(" · ") || "Abre tu agenda en BRÚJULA.";
+    systemNotify(`${cuando}: ${t.title}`, cuerpo, { tag: `brujula-tarea-${t.id}`, url: "/#agenda" });
+  }
+}
+
+function showReminder(tareas) {
+  const dlg = $("#reminderDialog");
+  if (!dlg) return;
+  const primera = tareas[0];
+  const titulo = tareas.length > 1 ? `${tareas.length} actividades por empezar`
+    : primera.minutos > 1 ? `En ${Math.round(primera.minutos)} minutos`
+    : primera.minutos >= -1 ? "Es hora de tu actividad" : "Tienes una actividad en curso";
+  const items = tareas.map((t) => `<li class="pending-item">
+      <span class="pending-icon">⏰</span>
+      <div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(`${horaLegible(t.due_time)}${t.contact_name ? ` · con ${t.contact_name}` : ""}${t.detail ? ` · ${t.detail}` : ""}`)}</small></div>
+      <button type="button" class="row-action" data-pending-done="${t.id}" title="Marcar como hecha" aria-label="Marcar ${escapeHtml(t.title)} como hecha">✓</button>
+    </li>`).join("");
+  const lista = $("#reminderList");
+  if (dlg.open) {
+    lista.insertAdjacentHTML("beforeend", items);
+    $("#reminderTitle").textContent = `${lista.children.length} actividades por empezar`;
+    return;
+  }
+  $("#reminderTitle").textContent = titulo;
+  lista.innerHTML = items;
+  dlg.showModal();
+}
+
+async function completePendingTask(id, boton) {
+  boton.disabled = true;
   try {
-    const n = new Notification("BRÚJULA · Seguimientos", { body: `${cuerpo} Abre tu red para avanzar.`, icon: "/assets/app-icon-192.png", tag: "brujula-followups" });
-    n.onclick = () => { window.focus(); goToView("contacts"); n.close(); };
-  } catch (_) { /* en algunas plataformas requiere Service Worker; el panel ya cubre el aviso */ }
+    await api(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ completed: true }) });
+    boton.closest("li")?.classList.add("is-done");
+    boton.textContent = "✔";
+    toast("¡Actividad completada!", "success");
+    await loadDashboard();
+  } catch (error) {
+    boton.disabled = false;
+    toast(error.message, "error");
+  }
+}
+
+function setupAvisos() {
+  registerServiceWorker();
+  $$("[data-close-pending]").forEach((b) => b.addEventListener("click", () => $("#pendingDialog").close()));
+  $$("[data-close-reminder]").forEach((b) => b.addEventListener("click", () => $("#reminderDialog").close()));
+  $("#pendingSnooze").addEventListener("click", () => {
+    try { localStorage.setItem("brujula_pending_snooze", isoDate()); } catch (_) {}
+    $("#pendingDialog").close();
+    toast("Hoy ya no te lo muestro al abrir. Los recordatorios a la hora siguen activos.", "info");
+  });
+  $("#pendingGoAgenda").addEventListener("click", () => { $("#pendingDialog").close(); goToView("agenda"); });
+  $("#reminderGoAgenda").addEventListener("click", () => { $("#reminderDialog").close(); goToView("agenda"); });
+  $("#pendingNotifyButton").addEventListener("click", requestNotifyPermission);
+  $("#pendingDialog").addEventListener("close", () => setTimeout(checkTaskReminders, 300));
+  for (const id of ["#pendingDialog", "#reminderDialog"]) {
+    $(id).addEventListener("click", (event) => {
+      const hecho = event.target.closest("[data-pending-done]");
+      if (hecho) { completePendingTask(Number(hecho.dataset.pendingDone), hecho); return; }
+      const contacto = event.target.closest("[data-pending-contact]");
+      if (contacto) { $(id).close(); openContactDialog(Number(contacto.dataset.pendingContact), true); }
+    });
+  }
+  // Tocar un aviso del sistema puede cambiar la sección (#agenda) con la app abierta.
+  window.addEventListener("hashchange", () => { const vista = location.hash.replace("#", ""); if (viewTitles[vista]) goToView(vista); });
+  setInterval(checkTaskReminders, 30 * 1000);
+  setInterval(() => { if (!document.hidden) loadDashboard(); }, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDashboard(); });
 }
 
 // --- Historial de seguimientos en la ficha ----------------------------------
@@ -1664,6 +1896,7 @@ async function loadRanks() {
 async function init() {
   buildQuiz();
   bindEvents();
+  setupAvisos();
   applyTodayLabels();
   restoreGuideChecklist();
   const initialView = location.hash.replace("#", "");
