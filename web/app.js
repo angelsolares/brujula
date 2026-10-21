@@ -228,14 +228,22 @@ function limpiarErrores(form) {
 }
 
 function goToView(viewName) {
+  // "Medir avances" ya no es una sección aparte: vive dentro de Mi tablero.
+  const irAMedir = viewName === "measure";
+  if (irAMedir) viewName = "dashboard";
   $$(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${viewName}`));
   $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === viewName));
   $("#viewTitle").textContent = viewTitles[viewName];
   $(".sidebar").classList.remove("open");
-  window.scrollTo({ top: 0, behavior: "smooth" });
   history.replaceState(null, "", `#${viewName}`);
+  if (irAMedir) {
+    loadMetrics();
+    requestAnimationFrame(() => $("#measureSection")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  } else {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
   if (viewName === "contacts") loadContacts();
-  if (viewName === "measure") loadMetrics();
+  if (viewName === "agenda") loadAgenda();
   if (viewName === "testimonios") loadTestimonials();
 }
 
@@ -363,7 +371,7 @@ function renderProfileBars(target, profiles, large = false) {
 function taskTemplate(task, timeline = false) {
   if (timeline) {
     return `<div class="timeline-item ${task.completed ? "done" : ""}" data-task-id="${task.id}">
-      <time class="timeline-time">${escapeHtml(task.due_time || "Hoy")}</time>
+      <time class="timeline-time">${escapeHtml(task.due_time ? String(task.due_time).slice(0, 5) : "Sin hora")}</time>
       <span class="timeline-dot"></span>
       <div class="timeline-copy"><strong>${escapeHtml(task.title)}</strong><p>${escapeHtml(task.detail)}</p><span>${escapeHtml(task.profile_tag)} · +${task.points} XP</span></div>
       <div class="timeline-actions">
@@ -382,19 +390,14 @@ function taskTemplate(task, timeline = false) {
 }
 
 function renderTasks(tasks) {
+  // Solo el tablero: la agenda se pinta aparte, para el día, semana o mes elegidos.
   const completed = tasks.filter((task) => task.completed).length;
   $("#dashboardTasks").innerHTML = tasks.length
     ? tasks.slice(0, 4).map((task) => taskTemplate(task)).join("")
     : `<p class="empty-state">Aún no hay misiones para hoy. Crea una desde la agenda.</p>`;
-  $("#agendaTasks").innerHTML = tasks.length
-    ? tasks.map((task) => taskTemplate(task, true)).join("")
-    : `<p class="empty-state">Tu día está libre. Agrega tu primera misión con el botón “Nueva misión”.</p>`;
   $("#taskRing").textContent = `${completed}/${tasks.length}`;
-  $("#agendaProgress").textContent = `${completed} de ${tasks.length} listas`;
-  $("#agendaPoints").textContent = `${tasks.filter((task) => !task.completed).reduce((sum, task) => sum + task.points, 0)} XP`;
-  $$(".mission-check").forEach((checkbox) => checkbox.addEventListener("change", toggleTask));
-  $$("[data-edit-task]").forEach((button) => button.addEventListener("click", () => openTaskDialog(Number(button.dataset.editTask))));
-  $$("[data-delete-task]").forEach((button) => button.addEventListener("click", () => deleteTask(Number(button.dataset.deleteTask))));
+  $$("#dashboardTasks .mission-check").forEach((checkbox) => checkbox.addEventListener("change", toggleTask));
+  refreshAgendaIfVisible();
 }
 
 function celebrate(unlocked = []) {
@@ -531,8 +534,14 @@ async function toggleTask(event) {
   }
 }
 
+// Una actividad puede venir del tablero (hoy) o de la agenda (cualquier día).
+function findTask(taskId) {
+  return [...(state.agenda?.data?.tasks || []), ...(state.dashboard?.tasks || []),
+    ...(state.alerts?.tasks_today || []), ...(state.alerts?.tasks_overdue || [])].find((item) => item.id === taskId) || null;
+}
+
 async function deleteTask(taskId) {
-  const task = (state.dashboard?.tasks || []).find((item) => item.id === taskId);
+  const task = findTask(taskId);
   const aceptado = await confirmar({
     title: "Eliminar misión",
     message: `Se eliminará “${task ? task.title : "esta misión"}” de tu agenda. Esta acción no se puede deshacer.`,
@@ -548,20 +557,20 @@ async function deleteTask(taskId) {
   finally { setBusy("#agendaTasks", false); }
 }
 
-function openTaskDialog(taskId = null) {
+function openTaskDialog(taskId = null, fechaInicial = null) {
   const form = $("#taskForm");
   form.reset();
   state.editingTaskId = taskId;
-  const task = taskId ? (state.dashboard?.tasks || []).find((item) => item.id === taskId) : null;
-  $("#taskModalKicker").textContent = task ? "EDITAR MISIÓN" : "NUEVA MISIÓN";
-  $("#taskModalTitle").textContent = task ? "Ajustar esta misión" : "Agregar una misión";
-  $("#taskSubmitButton").textContent = task ? "Guardar cambios" : "Guardar misión";
+  const task = taskId ? findTask(taskId) : null;
+  $("#taskModalKicker").textContent = task ? "EDITAR ACTIVIDAD" : "NUEVA ACTIVIDAD";
+  $("#taskModalTitle").textContent = task ? "Ajustar esta actividad" : "Agregar una actividad";
+  $("#taskSubmitButton").textContent = task ? "Guardar cambios" : "Guardar actividad";
   if (task) {
     ["title", "detail", "category", "profile_tag", "due_date", "due_time", "points"].forEach((key) => {
       if (form.elements[key]) form.elements[key].value = task[key] ?? "";
     });
   } else {
-    form.elements.due_date.value = isoDate();
+    form.elements.due_date.value = fechaInicial || (state.agenda?.mode === "day" && $("#view-agenda").classList.contains("active") ? state.agenda.date : isoDate());
     form.elements.points.value = 20;
   }
   $("#taskDialog").showModal();
@@ -693,9 +702,9 @@ const tourSteps = [
   { view: "dashboard", kicker: "PUNTO DE PARTIDA", title: "Mi tablero", icon: "⌂", mini: ["✦", "🔥"], color: "#7755c7", soft: "#f2edff", text: "Tu resumen diario reúne nivel, racha, metas, personas que necesitan atención, las misiones prioritarias y tus logros.", bullets: ["Revisa tu progreso de nivel", "Empieza por las misiones del día", "Al final verás las insignias que ya ganaste"] },
   { view: "contacts", kicker: "CENTRO DE DESARROLLO", title: "Mi red", icon: "♙", mini: ["♡", "→"], color: "#ed5f86", soft: "#fff0f4", text: "Aquí acompañas a prospectos, clientes y asociados. Cada registro conserva contexto y un próximo paso.", bullets: ["Agregar una persona da 25 XP", "Filtra por tipo o busca por notas", "Avanza la etapa, edita o elimina desde la fila"] },
   { view: "contacts", kicker: "REGISTRO EN GRUPO", title: "Captura por QR", icon: "▦", mini: ["📱", "🔒"], color: "#55a85b", soft: "#edf8ee", text: "En tus pláticas proyecta un código y deja que cada persona registre sus datos desde su celular, todas al mismo tiempo.", bullets: ["Se crea desde “Captura por QR”", "Escriben lo que quieren mejorar de su salud", "Entran solos a tu red con etiqueta ▦"] },
-  { view: "agenda", kicker: "ACCIÓN DIARIA", title: "Agenda de hoy", icon: "✓", mini: ["☎", "▶"], color: "#2878d0", soft: "#eaf5ff", text: "Las misiones transforman tu estrategia en acciones concretas. Puedes usar las sugeridas o crear las tuyas.", bullets: ["Crea misiones con “＋ Nueva misión”", "Marca la casilla al terminar", "Tú decides cuántos XP vale cada una"] },
+  { view: "agenda", kicker: "ACCIÓN DIARIA", title: "Agenda", icon: "✓", mini: ["☎", "▶"], color: "#2878d0", soft: "#eaf5ff", text: "Tus actividades y seguimientos en vista de día, semana o mes. Te recuerda cada actividad 10 minutos antes.", bullets: ["Crea actividades con “＋ Nueva actividad”", "Cambia entre Día, Semana y Mes", "La campana 🔔 reabre tus pendientes"] },
   { view: "map", kicker: "PLANEACIÓN", title: "Mi mapa", icon: "⌁", mini: ["◎", "🏆"], color: "#f49a2f", soft: "#fff5e8", text: "El mapa convierte metas grandes en un sendero visible y muestra el porcentaje de avance de cada objetivo.", bullets: ["Compara avance contra meta", "Detecta el tramo que necesita atención", "Celebra cada estación alcanzada"] },
-  { view: "measure", kicker: "RESULTADOS", title: "Medir avances", icon: "↗", mini: ["#", "$"], color: "#55a85b", soft: "#edf8ee", text: "Registra prospectos, presentaciones, clientes, asociados, ventas y productos para aprender de tus resultados.", bullets: ["Guardar el día da 15 XP", "La gráfica muestra los últimos cinco días", "Registrar a diario mejora tus decisiones"] },
+  { view: "measure", kicker: "RESULTADOS", title: "Lo que hice hoy", icon: "↗", mini: ["#", "$"], color: "#55a85b", soft: "#edf8ee", text: "En Mi tablero registras prospectos, presentaciones, clientes, asociados, ventas y productos para aprender de tus resultados.", bullets: ["Está dentro de Mi tablero", "Guardar el día da 15 XP", "La gráfica muestra los últimos cinco días"] },
   { view: "profile", kicker: "CONOCIMIENTO PERSONAL", title: "Mi brújula", icon: "✣", mini: ["⌕", "♡"], color: "#ef5f86", soft: "#fff0f4", text: "Tu propósito y los cinco perfiles explican cómo trabajas mejor y qué estrategia aprovecha tus fortalezas.", bullets: ["El test tiene 25 afirmaciones", "Completarlo da 75 XP", "Ningún perfil es mejor que otro"] },
   { view: "development", kicker: "CRECIMIENTO", title: "Desarrollo", icon: "♢", mini: ["🎧", "🌱"], color: "#d08b1d", soft: "#fff7dd", text: "Las rutas de desarrollo convierten conocimientos, hábitos y mentoría en capacidades sostenibles.", bullets: ["Elige una fortaleza para profundizar", "Trabaja un área de oportunidad", "Revisa el porcentaje de cada ruta"] },
 ];
@@ -905,6 +914,160 @@ async function deleteContact(contactId) {
   finally { setBusy("#contactRows", false); }
 }
 
+// --- Agenda por día, semana y mes -------------------------------------------
+
+const DIAS_CORTOS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const fmtDiaLargo = new Intl.DateTimeFormat("es-MX", { weekday: "long", day: "numeric", month: "long" });
+const fmtMesAnio = new Intl.DateTimeFormat("es-MX", { month: "long", year: "numeric" });
+const fmtDiaCorto = new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" });
+const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
+const fechaDe = (iso) => new Date(`${iso}T12:00:00`);
+const sumarDias = (iso, n) => { const d = fechaDe(iso); d.setDate(d.getDate() + n); return isoDate(d); };
+const sumarMeses = (iso, n) => { const d = fechaDe(iso); return isoDate(new Date(d.getFullYear(), d.getMonth() + n, 1, 12)); };
+const inicioSemana = (iso) => { const d = fechaDe(iso); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return isoDate(d); };
+let agendaSeq = 0;
+
+function rangoAgenda({ mode, date }) {
+  if (mode === "day") return { from: date, to: date };
+  if (mode === "week") { const from = inicioSemana(date); return { from, to: sumarDias(from, 6) }; }
+  // Mes: semanas completas (de lunes a domingo) que cubren el mes.
+  const d = fechaDe(date);
+  const primero = isoDate(new Date(d.getFullYear(), d.getMonth(), 1, 12));
+  const ultimo = isoDate(new Date(d.getFullYear(), d.getMonth() + 1, 0, 12));
+  return { from: inicioSemana(primero), to: sumarDias(inicioSemana(ultimo), 6) };
+}
+
+function etiquetaAgenda(st, rango) {
+  if (st.mode === "day") return `${st.date === isoDate() ? "Hoy · " : ""}${capitalizar(fmtDiaLargo.format(fechaDe(st.date)))}`;
+  if (st.mode === "week") return `${fmtDiaCorto.format(fechaDe(rango.from))} – ${fmtDiaCorto.format(fechaDe(rango.to))}`;
+  return capitalizar(fmtMesAnio.format(fechaDe(st.date)));
+}
+
+async function loadAgenda() {
+  if (!state.agenda) state.agenda = { mode: "day", date: isoDate(), data: null };
+  const st = state.agenda;
+  const rango = rangoAgenda(st);
+  $$("[data-agenda-mode]").forEach((b) => {
+    const activo = b.dataset.agendaMode === st.mode;
+    b.classList.toggle("active", activo);
+    b.setAttribute("aria-selected", String(activo));
+  });
+  $("#agendaRangeLabel").textContent = etiquetaAgenda(st, rango);
+  $("#agendaDayLayout").hidden = st.mode !== "day";
+  $("#agendaWeek").hidden = st.mode !== "week";
+  $("#agendaMonth").hidden = st.mode !== "month";
+  const seq = ++agendaSeq;
+  try {
+    const data = await api(`/api/agenda?from=${rango.from}&to=${rango.to}`);
+    if (seq !== agendaSeq) return; // llegó tarde una carga anterior
+    st.data = data;
+    if (st.mode === "day") renderAgendaDay(data, st.date);
+    else if (st.mode === "week") renderAgendaWeek(data, rango);
+    else renderAgendaMonth(data, rango);
+  } catch (error) {
+    if (seq === agendaSeq) toast(`No pude cargar la agenda: ${error.message}`, "error");
+  }
+}
+
+function refreshAgendaIfVisible() {
+  if ($("#view-agenda")?.classList.contains("active")) loadAgenda();
+}
+
+const agendaFollowupItem = (p) => `<li class="pending-item">
+    <span class="pending-icon">☎</span>
+    <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.next_action || "Definir siguiente paso")}</small></div>
+    <div class="pending-actions"><button type="button" class="pending-btn primary" data-agenda-contact="${p.id}">Registrar seguimiento</button></div>
+  </li>`;
+
+function renderAgendaDay(data, fecha) {
+  const tareas = data.tasks.filter((t) => t.due_date === fecha);
+  const seguimientos = data.followups.filter((p) => p.next_action_date === fecha);
+  const hechas = tareas.filter((t) => t.completed).length;
+  const esHoy = fecha === isoDate();
+  $("#agendaDayLabel").textContent = esHoy ? "HOY" : fmtDiaLargo.format(fechaDe(fecha)).toUpperCase();
+  $("#agendaDayTitle").textContent = esHoy ? "Tu ruta del día" : "Actividades de este día";
+  $("#agendaProgress").textContent = `${hechas} de ${tareas.length} listas`;
+  $("#agendaPoints").textContent = `${tareas.filter((t) => !t.completed).reduce((suma, t) => suma + t.points, 0)} XP`;
+  $("#agendaPointsLabel").textContent = esHoy ? "disponibles hoy" : "disponibles ese día";
+  $("#agendaTasks").innerHTML = tareas.length
+    ? tareas.map((t) => taskTemplate(t, true)).join("")
+    : `<p class="empty-state">${esHoy ? "Tu día está libre." : "No hay actividades este día."} Agrega una con “Nueva actividad”.</p>`;
+  const caja = $("#agendaDayFollowups");
+  caja.hidden = !seguimientos.length;
+  caja.innerHTML = seguimientos.length
+    ? `<h4>Personas a las que toca dar seguimiento</h4><ul class="pending-list">${seguimientos.map(agendaFollowupItem).join("")}</ul>`
+    : "";
+}
+
+const chipTarea = (t) => `<button type="button" class="agenda-chip chip-task${t.completed ? " is-done" : ""}${!t.completed && t.due_date < isoDate() ? " is-overdue" : ""}" data-agenda-task="${t.id}" title="${escapeHtml(t.title)}"><b>${escapeHtml(t.due_time ? horaLegible(t.due_time) : "·")}</b> ${escapeHtml(t.title)}</button>`;
+const chipSeguimiento = (p) => `<button type="button" class="agenda-chip chip-followup" data-agenda-contact="${p.id}" title="Seguimiento con ${escapeHtml(p.name)}">☎ ${escapeHtml(p.name)}</button>`;
+
+function renderAgendaWeek(data, rango) {
+  const hoy = isoDate();
+  const columnas = [];
+  for (let i = 0; i < 7; i++) {
+    const dia = sumarDias(rango.from, i);
+    const tareas = data.tasks.filter((t) => t.due_date === dia);
+    const seguimientos = data.followups.filter((p) => p.next_action_date === dia);
+    const fecha = fechaDe(dia);
+    columnas.push(`<section class="agenda-col${dia === hoy ? " is-today" : ""}">
+      <button type="button" class="agenda-col-head" data-agenda-day="${dia}" title="Ver el día completo"><span>${DIAS_CORTOS[i]}</span><strong>${fecha.getDate()}</strong></button>
+      <div class="agenda-col-items">
+        ${tareas.map(chipTarea).join("")}${seguimientos.map(chipSeguimiento).join("")}
+        ${tareas.length || seguimientos.length ? "" : '<p class="agenda-empty">Libre</p>'}
+      </div>
+      <button type="button" class="agenda-add" data-agenda-new="${dia}" aria-label="Agregar actividad el ${escapeHtml(fmtDiaLargo.format(fecha))}">＋ Agregar</button>
+    </section>`);
+  }
+  $("#agendaWeek").innerHTML = columnas.join("");
+}
+
+function renderAgendaMonth(data, rango) {
+  const hoy = isoDate();
+  const mes = fechaDe(state.agenda.date).getMonth();
+  const celdas = DIAS_CORTOS.map((d) => `<div class="agenda-month-head">${d}</div>`);
+  for (let dia = rango.from; dia <= rango.to; dia = sumarDias(dia, 1)) {
+    const fecha = fechaDe(dia);
+    const items = [...data.tasks.filter((t) => t.due_date === dia).map(chipTarea),
+      ...data.followups.filter((p) => p.next_action_date === dia).map(chipSeguimiento)];
+    celdas.push(`<div class="agenda-cell${fecha.getMonth() !== mes ? " is-other" : ""}${dia === hoy ? " is-today" : ""}" data-agenda-day="${dia}" role="button" tabindex="0" aria-label="${escapeHtml(fmtDiaLargo.format(fecha))}: ${items.length} pendientes">
+      <span class="agenda-cell-num">${fecha.getDate()}</span>
+      <div class="agenda-cell-items">${items.slice(0, 3).join("")}${items.length > 3 ? `<span class="agenda-more">+${items.length - 3} más</span>` : ""}</div>
+      ${items.length ? `<span class="agenda-cell-count" aria-hidden="true">${items.length}</span>` : ""}
+    </div>`);
+  }
+  $("#agendaMonth").innerHTML = celdas.join("");
+}
+
+function setupAgenda() {
+  const vista = $("#view-agenda");
+  vista.addEventListener("change", (event) => { if (event.target.matches(".mission-check")) toggleTask(event); });
+  vista.addEventListener("keydown", (event) => {
+    const celda = event.target.closest(".agenda-cell");
+    if (celda && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); celda.click(); }
+  });
+  vista.addEventListener("click", (event) => {
+    const b = event.target.closest("[data-agenda-mode],[data-agenda-step],[data-agenda-today],[data-edit-task],[data-delete-task],[data-agenda-task],[data-agenda-contact],[data-agenda-new],[data-agenda-day]");
+    if (!b) return;
+    const st = state.agenda || (state.agenda = { mode: "day", date: isoDate(), data: null });
+    const ds = b.dataset;
+    if (ds.agendaMode) { st.mode = ds.agendaMode; loadAgenda(); return; }
+    if (ds.agendaStep) {
+      const n = Number(ds.agendaStep);
+      st.date = st.mode === "day" ? sumarDias(st.date, n) : st.mode === "week" ? sumarDias(st.date, 7 * n) : sumarMeses(st.date, n);
+      loadAgenda();
+      return;
+    }
+    if ("agendaToday" in ds) { st.date = isoDate(); loadAgenda(); return; }
+    if (ds.editTask) { openTaskDialog(Number(ds.editTask)); return; }
+    if (ds.agendaTask) { openTaskDialog(Number(ds.agendaTask)); return; }
+    if (ds.deleteTask) { deleteTask(Number(ds.deleteTask)); return; }
+    if (ds.agendaContact) { openContactDialog(Number(ds.agendaContact), true); return; }
+    if (ds.agendaNew) { openTaskDialog(null, ds.agendaNew); return; }
+    if (ds.agendaDay) { st.mode = "day"; st.date = ds.agendaDay; loadAgenda(); }
+  });
+}
+
 // --- Alertas y seguimientos -------------------------------------------------
 
 const channelIcons = { Llamada: "📞", Mensaje: "💬", WhatsApp: "🟢", Reunión: "🤝", Café: "☕", Correo: "✉", Evento: "🎪", Otro: "•" };
@@ -943,6 +1106,12 @@ function renderFollowupAlerts(alerts) {
     const pendientesAgenda = alerts?.pending_tasks || 0;
     badgeAgenda.hidden = pendientesAgenda === 0;
     badgeAgenda.textContent = pendientesAgenda;
+  }
+  const campana = $("#pendingBellCount");
+  if (campana) {
+    const totalPendientes = (alerts?.pending || 0) + (alerts?.pending_tasks || 0);
+    campana.hidden = totalPendientes === 0;
+    campana.textContent = totalPendientes > 99 ? "99+" : totalPendientes;
   }
   if (alerts) {
     maybeShowPendingPopup(alerts);
@@ -1095,14 +1264,23 @@ function maybeNotify(alerts, force = false) {
 
 const horaLegible = (hhmm) => (hhmm ? String(hhmm).slice(0, 5) : "Sin hora");
 
+// Cada pendiente trae sus acciones a la mano: dar seguimiento, pasar a mañana o
+// marcar como hecho, sin tener que buscarlo en la agenda.
 function pendingTaskItem(t) {
   const atrasada = t.due_date < isoDate();
   const cuando = atrasada ? `${shortDate(t.due_date)} · atrasada` : (t.due_time ? `Hoy a las ${horaLegible(t.due_time)}` : "Hoy");
   const quien = t.contact_name ? ` · con ${t.contact_name}` : "";
+  const seguir = t.contact_id
+    ? `<button type="button" class="pending-btn primary" data-pending-follow-task="${t.id}" data-contact-id="${t.contact_id}">Dar seguimiento</button>`
+    : `<button type="button" class="pending-btn primary" data-pending-edit="${t.id}">Abrir</button>`;
   return `<li class="pending-item${atrasada ? " is-overdue" : ""}">
     <span class="pending-icon">${atrasada ? "⏰" : "✓"}</span>
     <div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(cuando + quien)}</small></div>
-    <button type="button" class="row-action" data-pending-done="${t.id}" title="Marcar como hecha" aria-label="Marcar ${escapeHtml(t.title)} como hecha">✓</button>
+    <div class="pending-actions">
+      ${seguir}
+      <button type="button" class="pending-btn" data-pending-postpone="${t.id}" title="Pasar esta actividad a mañana">Mañana</button>
+      <button type="button" class="pending-btn done" data-pending-done="${t.id}" title="Marcar como hecha">✓ Hecha</button>
+    </div>
   </li>`;
 }
 
@@ -1111,7 +1289,10 @@ function pendingFollowupItem(p) {
   return `<li class="pending-item${atrasado ? " is-overdue" : ""}">
     <span class="pending-icon">${atrasado ? "⏰" : "☎"}</span>
     <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(`${p.next_action || "Definir siguiente paso"} · ${relativeDay(p.next_action_date)}`)}</small></div>
-    <button type="button" class="row-action" data-pending-contact="${p.id}" title="Registrar seguimiento" aria-label="Registrar seguimiento de ${escapeHtml(p.name)}">→</button>
+    <div class="pending-actions">
+      <button type="button" class="pending-btn primary" data-pending-contact="${p.id}">Dar seguimiento</button>
+      <button type="button" class="pending-btn" data-pending-postpone-contact="${p.id}" title="Pasar este seguimiento a mañana">Mañana</button>
+    </div>
   </li>`;
 }
 
@@ -1190,11 +1371,7 @@ function showReminder(tareas) {
   const titulo = tareas.length > 1 ? `${tareas.length} actividades por empezar`
     : primera.minutos > 1 ? `En ${Math.round(primera.minutos)} minutos`
     : primera.minutos >= -1 ? "Es hora de tu actividad" : "Tienes una actividad en curso";
-  const items = tareas.map((t) => `<li class="pending-item">
-      <span class="pending-icon">⏰</span>
-      <div><strong>${escapeHtml(t.title)}</strong><small>${escapeHtml(`${horaLegible(t.due_time)}${t.contact_name ? ` · con ${t.contact_name}` : ""}${t.detail ? ` · ${t.detail}` : ""}`)}</small></div>
-      <button type="button" class="row-action" data-pending-done="${t.id}" title="Marcar como hecha" aria-label="Marcar ${escapeHtml(t.title)} como hecha">✓</button>
-    </li>`).join("");
+  const items = tareas.map(pendingTaskItem).join("");
   const lista = $("#reminderList");
   if (dlg.open) {
     lista.insertAdjacentHTML("beforeend", items);
@@ -1206,18 +1383,68 @@ function showReminder(tareas) {
   dlg.showModal();
 }
 
+// Tras una acción dentro de la ventana de pendientes, mostrar lo que queda.
+function refreshPendingPopup() {
+  const dlg = $("#pendingDialog");
+  if (!dlg?.open) return;
+  const quedan = (state.alerts?.pending || 0) + (state.alerts?.pending_tasks || 0);
+  if (quedan) showPendingPopup(state.alerts);
+  else { dlg.close(); toast("¡Estás al día! No te quedan pendientes 🎉", "success"); }
+}
+
 async function completePendingTask(id, boton) {
   boton.disabled = true;
   try {
     await api(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ completed: true }) });
     boton.closest("li")?.classList.add("is-done");
-    boton.textContent = "✔";
+    boton.textContent = "✔ Hecha";
     toast("¡Actividad completada!", "success");
     await loadDashboard();
+    refreshPendingPopup();
   } catch (error) {
     boton.disabled = false;
     toast(error.message, "error");
   }
+}
+
+async function postponeTask(id, boton) {
+  boton.disabled = true;
+  try {
+    await api(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify({ due_date: isoPlusDays(1) }) });
+    boton.closest("li")?.classList.add("is-done");
+    toast("Actividad pasada a mañana", "success");
+    await loadDashboard();
+    refreshPendingPopup();
+  } catch (error) {
+    boton.disabled = false;
+    toast(error.message, "error");
+  }
+}
+
+// Abrir algo desde la ventana de pendientes y regresar a ella al terminar.
+function leavePendingFor(abrir) {
+  state.reopenPending = true;
+  document.querySelectorAll("#pendingDialog[open], #reminderDialog[open]").forEach((d) => d.close());
+  abrir();
+}
+
+async function returnToPending() {
+  if (!state.reopenPending) return;
+  state.reopenPending = false;
+  state.followupFromTask = null;
+  await loadDashboard();
+  if (document.querySelector("dialog[open]")) return;
+  const quedan = (state.alerts?.pending || 0) + (state.alerts?.pending_tasks || 0);
+  if (quedan) showPendingPopup(state.alerts);
+  else toast("¡Estás al día! No te quedan pendientes 🎉", "success");
+}
+
+// Campana y botón "Ver pendientes": reabrir la ventana cuando se quiera.
+function openPendingManually() {
+  const quedan = (state.alerts?.pending || 0) + (state.alerts?.pending_tasks || 0);
+  if (!quedan) { toast("No tienes pendientes por ahora 🎉", "success"); return; }
+  document.querySelectorAll("dialog[open]").forEach((d) => d.close());
+  showPendingPopup(state.alerts);
 }
 
 function setupAvisos() {
@@ -1234,13 +1461,33 @@ function setupAvisos() {
   $("#pendingNotifyButton").addEventListener("click", requestNotifyPermission);
   $("#pendingDialog").addEventListener("close", () => setTimeout(checkTaskReminders, 300));
   for (const id of ["#pendingDialog", "#reminderDialog"]) {
-    $(id).addEventListener("click", (event) => {
-      const hecho = event.target.closest("[data-pending-done]");
-      if (hecho) { completePendingTask(Number(hecho.dataset.pendingDone), hecho); return; }
-      const contacto = event.target.closest("[data-pending-contact]");
-      if (contacto) { $(id).close(); openContactDialog(Number(contacto.dataset.pendingContact), true); }
+    $(id).addEventListener("click", async (event) => {
+      const b = event.target.closest("[data-pending-done],[data-pending-postpone],[data-pending-follow-task],[data-pending-edit],[data-pending-contact],[data-pending-postpone-contact]");
+      if (!b) return;
+      const ds = b.dataset;
+      if (ds.pendingDone) { completePendingTask(Number(ds.pendingDone), b); return; }
+      if (ds.pendingPostpone) { postponeTask(Number(ds.pendingPostpone), b); return; }
+      if (ds.pendingPostponeContact) {
+        b.disabled = true;
+        await postponeAlert(Number(ds.pendingPostponeContact));
+        refreshPendingPopup();
+        return;
+      }
+      if (ds.pendingFollowTask) {
+        // Registrar el seguimiento con la persona deja la actividad como hecha.
+        state.followupFromTask = { taskId: Number(ds.pendingFollowTask), contactId: Number(ds.contactId) };
+        leavePendingFor(() => openContactDialog(Number(ds.contactId), true));
+        return;
+      }
+      if (ds.pendingEdit) { leavePendingFor(() => openTaskDialog(Number(ds.pendingEdit))); return; }
+      if (ds.pendingContact) { leavePendingFor(() => openContactDialog(Number(ds.pendingContact), true)); }
     });
   }
+  // Al cerrar la ficha o la actividad abiertas desde los pendientes, volver a la ventana.
+  $("#contactDialog").addEventListener("close", () => setTimeout(returnToPending, 150));
+  $("#taskDialog").addEventListener("close", () => setTimeout(returnToPending, 150));
+  $("#openPendingButton").addEventListener("click", openPendingManually);
+  $("#agendaPendingButton").addEventListener("click", openPendingManually);
   // Tocar un aviso del sistema puede cambiar la sección (#agenda) con la app abierta.
   window.addEventListener("hashchange", () => { const vista = location.hash.replace("#", ""); if (viewTitles[vista]) goToView(vista); });
   setInterval(checkTaskReminders, 30 * 1000);
@@ -1304,7 +1551,19 @@ async function submitFollowup() {
         if ($("#contactForm").elements.next_action) $("#contactForm").elements.next_action.value = result.contact.next_action || "";
         if ($("#contactForm").elements.next_action_date) $("#contactForm").elements.next_action_date.value = result.contact.next_action_date || "";
       }
-      toast("Seguimiento registrado +10 XP", "success");
+      // Si se llegó desde una actividad de la agenda con esta persona, queda como hecha.
+      const desdeActividad = state.followupFromTask;
+      if (desdeActividad && desdeActividad.contactId === contactId) {
+        state.followupFromTask = null;
+        try {
+          await api(`/api/tasks/${desdeActividad.taskId}`, { method: "PATCH", body: JSON.stringify({ completed: true }) });
+          toast("Seguimiento registrado y actividad marcada como hecha +10 XP", "success");
+        } catch (_) {
+          toast("Seguimiento registrado +10 XP (no pude marcar la actividad como hecha)", "info");
+        }
+      } else {
+        toast("Seguimiento registrado +10 XP", "success");
+      }
       await loadFollowups(contactId);
       await Promise.all([loadDashboard(), loadContacts()]);
     } catch (error) { toast(error.message, "error"); }
@@ -1897,10 +2156,12 @@ async function init() {
   buildQuiz();
   bindEvents();
   setupAvisos();
+  setupAgenda();
   applyTodayLabels();
   restoreGuideChecklist();
+  // Sin una sección en la dirección, la app abre directo en Mi red.
   const initialView = location.hash.replace("#", "");
-  if (viewTitles[initialView]) goToView(initialView);
+  goToView(viewTitles[initialView] ? initialView : "contacts");
   await loadAccount();
   await loadRanks();
   await Promise.all([loadDashboard(), loadMetrics(), showStorageMode()]);

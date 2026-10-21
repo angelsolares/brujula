@@ -1479,6 +1479,22 @@ def search_testimonials(db, query: str, limit: int = 60) -> dict:
             "query": query, "expansions": expansiones, "results": filas}
 
 
+def agenda_range(db, user_id: int, desde: str, hasta: str) -> dict:
+    """Actividades y seguimientos de contactos entre dos fechas, para la agenda
+    por día, semana o mes."""
+    tareas = rows(db.execute(
+        """SELECT t.*, c.name AS contact_name FROM tasks t LEFT JOIN contacts c ON c.id = t.contact_id
+           WHERE t.user_id=? AND t.due_date BETWEEN ? AND ?
+           ORDER BY t.due_date, COALESCE(NULLIF(t.due_time,''),'99:99'), t.id""",
+        (user_id, desde, hasta)))
+    seguimientos = rows(db.execute(
+        """SELECT id, name, kind, stage, next_action, next_action_date FROM contacts
+           WHERE user_id=? AND next_action_date BETWEEN ? AND ?
+           ORDER BY next_action_date, name""",
+        (user_id, desde, hasta)))
+    return {"from": desde, "to": hasta, "tasks": tareas, "followups": seguimientos}
+
+
 def followup_alerts(db, user_id: int, upcoming_days: int = 7) -> dict:
     """Agrupa a las personas con una próxima acción agendada en atrasadas, de hoy
     y próximas. Es la base de las alertas de seguimiento dentro de la app."""
@@ -1810,6 +1826,21 @@ class AppHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/testimonials":
                 query = parse_qs(parsed.query).get("q", [""])[0]
                 self.send_json(search_testimonials(db, query))
+                return
+            if parsed.path == "/api/agenda":
+                query = parse_qs(parsed.query)
+                try:
+                    desde = clean_date(query.get("from", [today()])[0], "La fecha inicial") or today()
+                    hasta = clean_date(query.get("to", [desde])[0], "La fecha final") or desde
+                except ValueError as exc:
+                    self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                    return
+                if hasta < desde:
+                    desde, hasta = hasta, desde
+                if (date.fromisoformat(hasta) - date.fromisoformat(desde)).days > 62:
+                    self.send_json({"error": "El rango de la agenda no puede pasar de dos meses"}, HTTPStatus.BAD_REQUEST)
+                    return
+                self.send_json(agenda_range(db, self.user_id, desde, hasta))
                 return
             if parsed.path == "/api/auth/me":
                 self.send_json({"name": self.account["name"], "email": self.account["email"],

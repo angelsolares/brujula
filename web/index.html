@@ -51,13 +51,14 @@
         <span><strong>BRÚJULA</strong><small>Centro de desarrollo</small></span>
       </a>
       <nav class="nav-list">
-        <button class="nav-item active" data-view="dashboard"><span>⌂</span> Mi tablero</button>
-        <button class="nav-item" data-view="contacts"><span>♙</span> Mi red <b id="navContactCount">0</b><i class="nav-alert-badge" id="navAlertBadge" hidden title="Seguimientos pendientes"></i></button>
-        <button class="nav-item" data-view="agenda"><span>✓</span> Agenda de hoy<i class="nav-alert-badge" id="navTaskBadge" hidden title="Actividades pendientes"></i></button>
-        <button class="nav-item" data-view="map"><span>⌁</span> Mi mapa</button>
-        <button class="nav-item" data-view="measure"><span>↗</span> Medir avances</button>
-        <button class="nav-item" data-view="profile"><span>✣</span> Mi brújula</button>
-        <button class="nav-item" data-view="development"><span>♢</span> Desarrollo</button>
+        <button class="nav-item" data-view="dashboard"><span>⌂</span> Mi tablero</button>
+        <div class="nav-sub-group" aria-label="Dentro de Mi tablero">
+          <button class="nav-item nav-sub" data-view="map"><span>⌁</span> Mi mapa</button>
+          <button class="nav-item nav-sub" data-view="profile"><span>✣</span> Mi brújula</button>
+          <button class="nav-item nav-sub" data-view="development"><span>♢</span> Desarrollo</button>
+        </div>
+        <button class="nav-item active" data-view="contacts"><span>♙</span> Mi red <b id="navContactCount">0</b><i class="nav-alert-badge" id="navAlertBadge" hidden title="Seguimientos pendientes"></i></button>
+        <button class="nav-item" data-view="agenda"><span>✓</span> Agenda<i class="nav-alert-badge" id="navTaskBadge" hidden title="Actividades pendientes"></i></button>
         <button class="nav-item" data-view="testimonios"><span>▶</span> Testimonios</button>
         <button class="nav-item nav-guide" data-view="guide"><span>?</span> Guía interactiva</button>
       </nav>
@@ -88,12 +89,12 @@
         </div>
         <div class="top-actions">
           <div class="xp-pill"><span>✦</span><div><small>EXPERIENCIA</small><strong id="headerXp">0 XP</strong></div></div>
-          <button class="icon-button" aria-label="Notificaciones">♢<i></i></button>
+          <button class="icon-button pending-bell" id="openPendingButton" type="button" aria-label="Ver mis pendientes" title="Ver mis pendientes">🔔<b class="pending-bell-count" id="pendingBellCount" hidden></b></button>
           <button class="primary-button" data-open-contact><span>＋</span> Nuevo contacto</button>
         </div>
       </header>
 
-      <section class="view active" id="view-dashboard" aria-labelledby="viewTitle">
+      <section class="view" id="view-dashboard" aria-labelledby="viewTitle">
         <article class="hero-card" id="dashboardHero">
           <div class="hero-overlay"></div>
           <div class="hero-copy">
@@ -138,13 +139,37 @@
 
         <div class="section-heading">
           <div><span class="mini-kicker">TU NEGOCIO HOY</span><h2>Panel de rumbo</h2></div>
-          <button class="text-button" data-go-view="measure">Ver reporte completo →</button>
+          <button class="text-button" data-go-view="measure">Registrar mi día →</button>
         </div>
         <div class="stat-grid">
           <article class="stat-card purple"><span class="stat-icon">♙</span><div><small>PROSPECTOS</small><strong id="statProspects">0</strong><p><em id="trendProspects">+0</em> esta semana</p></div><span class="spark">⌁</span></article>
           <article class="stat-card pink"><span class="stat-icon">♡</span><div><small>CLIENTES</small><strong id="statClients">0</strong><p><em id="trendClients">+0</em> este mes</p></div><span class="spark">⌁</span></article>
           <article class="stat-card blue"><span class="stat-icon">♢</span><div><small>ASOCIADOS</small><strong id="statAssociates">0</strong><p><em id="trendAssociates">+0</em> este mes</p></div><span class="spark">⌁</span></article>
           <article class="stat-card gold"><span class="stat-icon">✦</span><div><small>VENTAS DEL MES</small><strong id="statSales">$0</strong><p><em id="salesPercent">0%</em> de la meta</p></div><span class="spark">⌁</span></article>
+        </div>
+
+        <div class="section-heading" id="measureSection">
+          <div><span class="mini-kicker">MEDIR</span><h2>Lo que hice hoy</h2></div>
+          <span class="soft-chip">+15 XP al guardar</span>
+        </div>
+        <div class="measure-layout">
+          <form class="panel metrics-form" id="metricsForm" novalidate>
+            <div class="panel-head"><div><span class="mini-kicker">REGISTRO DIARIO</span><h3>Cuéntale a tu brújula</h3></div><span class="metric-date" id="metricDateLabel"></span></div>
+            <div class="number-grid">
+              <label><span>Prospectos nuevos</span><input name="new_prospects" type="number" min="0" value="0"><small>personas</small></label>
+              <label><span>Presentaciones</span><input name="presentations" type="number" min="0" value="0"><small>sesiones</small></label>
+              <label><span>Clientes nuevos</span><input name="new_clients" type="number" min="0" value="0"><small>clientes</small></label>
+              <label><span>Asociados nuevos</span><input name="new_associates" type="number" min="0" value="0"><small>socios</small></label>
+            </div>
+            <label class="money-field"><span>¿Cuánto vendí?</span><div><b>$</b><input name="sales" type="number" min="0" step="100" value="0"><small>MXN</small></div></label>
+            <div class="number-grid">
+              <label><span>Puntos de volumen (VVP)</span><input name="volume_points" type="number" min="0" step="10" value="0"><small>cuentan para tu rango</small></label>
+              <label><span>Pedidos de cliente de 400+ VP</span><input name="client_orders" type="number" min="0" step="1" value="0"><small>cuentan para el bono</small></label>
+            </div>
+            <label class="full-field"><span>Productos específicos vendidos</span><input name="products_sold" type="text" placeholder="Ej. Platinum x2, Sport x1"></label>
+            <button class="primary-button wide" type="submit">Guardar mi avance ✦</button>
+          </form>
+          <article class="panel report-panel"><div class="panel-head"><div><span class="mini-kicker">ÚLTIMOS 5 DÍAS</span><h3>Tu energía en movimiento</h3></div></div><div class="sales-chart" id="salesChart"></div><div class="report-totals" id="reportTotals"></div></article>
         </div>
 
         <div class="dashboard-grid">
@@ -168,7 +193,7 @@
         <div class="achievement-strip" id="achievementStrip"></div>
       </section>
 
-      <section class="view" id="view-contacts">
+      <section class="view active" id="view-contacts">
         <div class="page-intro">
           <div><span class="mini-kicker">CENTRO DE DESARROLLO</span><h2>Mi red</h2><p>Haz visible cada relación, el interés y el siguiente paso.</p></div>
           <div class="page-intro-actions">
@@ -196,9 +221,24 @@
       </section>
 
       <section class="view" id="view-agenda">
-        <div class="page-intro"><div><span class="mini-kicker">ACTUAR</span><h2>Agenda de hoy</h2><p>Acciones sugeridas según tus fortalezas y tu red.</p></div><div class="agenda-intro-actions"><div class="day-score"><span>✦</span><strong id="agendaPoints">0 XP</strong><small>disponibles hoy</small></div><button class="primary-button" id="openTaskDialog">＋ Nueva misión</button></div></div>
-        <div class="agenda-layout">
-          <article class="panel timeline-panel"><div class="panel-head"><div><span class="mini-kicker" id="agendaDayLabel">HOY</span><h3>Tu ruta del día</h3></div><span class="soft-chip" id="agendaProgress">0 de 0 listas</span></div><div class="timeline" id="agendaTasks"></div></article>
+        <div class="page-intro"><div><span class="mini-kicker">ACTUAR</span><h2>Mi agenda</h2><p>Tus actividades y seguimientos por día, semana o mes.</p></div><div class="agenda-intro-actions"><div class="day-score"><span>✦</span><strong id="agendaPoints">0 XP</strong><small id="agendaPointsLabel">disponibles hoy</small></div><button class="secondary-button" id="agendaPendingButton" type="button">🔔 Ver pendientes</button><button class="primary-button" id="openTaskDialog">＋ Nueva actividad</button></div></div>
+        <div class="agenda-toolbar">
+          <div class="agenda-modes" role="tablist" aria-label="Vista de la agenda">
+            <button type="button" role="tab" class="active" data-agenda-mode="day" aria-selected="true">Día</button>
+            <button type="button" role="tab" data-agenda-mode="week" aria-selected="false">Semana</button>
+            <button type="button" role="tab" data-agenda-mode="month" aria-selected="false">Mes</button>
+          </div>
+          <div class="agenda-nav">
+            <button type="button" class="row-action" data-agenda-step="-1" aria-label="Anterior">‹</button>
+            <button type="button" class="agenda-today" data-agenda-today>Hoy</button>
+            <button type="button" class="row-action" data-agenda-step="1" aria-label="Siguiente">›</button>
+            <strong id="agendaRangeLabel"></strong>
+          </div>
+        </div>
+        <div class="agenda-week" id="agendaWeek" hidden></div>
+        <div class="agenda-month" id="agendaMonth" hidden></div>
+        <div class="agenda-layout" id="agendaDayLayout">
+          <article class="panel timeline-panel"><div class="panel-head"><div><span class="mini-kicker" id="agendaDayLabel">HOY</span><h3 id="agendaDayTitle">Tu ruta del día</h3></div><span class="soft-chip" id="agendaProgress">0 de 0 listas</span></div><div class="timeline" id="agendaTasks"></div><div class="agenda-day-followups" id="agendaDayFollowups" hidden></div></article>
           <aside class="agenda-side">
             <article class="panel focus-card"><span class="focus-icon">♢</span><span class="mini-kicker">PODER DE HOY</span><h3>Conecta antes de convencer</h3><p id="focusCardText">Tu perfil se potencia cuando escuchas la meta de la otra persona.</p><div class="bonus">+10 XP por registrar notas</div></article>
             <article class="panel tiny-progress"><div><span>Racha semanal</span><strong id="weeklyStreak">0/7</strong></div><div class="week-dots" id="weekDots"></div></article>
@@ -235,29 +275,6 @@
           <p class="income-disclaimer" id="incomeDisclaimer"></p>
         </article>
         <div class="goal-grid" id="goalGrid"></div>
-      </section>
-
-      <section class="view" id="view-measure">
-        <div class="page-intro"><div><span class="mini-kicker">MEDIR</span><h2>Lo que hice hoy</h2><p>Registrar tus avances convierte esfuerzo en aprendizaje.</p></div><span class="soft-chip">+15 XP al guardar</span></div>
-        <div class="measure-layout">
-          <form class="panel metrics-form" id="metricsForm" novalidate>
-            <div class="panel-head"><div><span class="mini-kicker">REGISTRO DIARIO</span><h3>Cuéntale a tu brújula</h3></div><span class="metric-date" id="metricDateLabel"></span></div>
-            <div class="number-grid">
-              <label><span>Prospectos nuevos</span><input name="new_prospects" type="number" min="0" value="0"><small>personas</small></label>
-              <label><span>Presentaciones</span><input name="presentations" type="number" min="0" value="0"><small>sesiones</small></label>
-              <label><span>Clientes nuevos</span><input name="new_clients" type="number" min="0" value="0"><small>clientes</small></label>
-              <label><span>Asociados nuevos</span><input name="new_associates" type="number" min="0" value="0"><small>socios</small></label>
-            </div>
-            <label class="money-field"><span>¿Cuánto vendí?</span><div><b>$</b><input name="sales" type="number" min="0" step="100" value="0"><small>MXN</small></div></label>
-            <div class="number-grid">
-              <label><span>Puntos de volumen (VVP)</span><input name="volume_points" type="number" min="0" step="10" value="0"><small>cuentan para tu rango</small></label>
-              <label><span>Pedidos de cliente de 400+ VP</span><input name="client_orders" type="number" min="0" step="1" value="0"><small>cuentan para el bono</small></label>
-            </div>
-            <label class="full-field"><span>Productos específicos vendidos</span><input name="products_sold" type="text" placeholder="Ej. Platinum x2, Sport x1"></label>
-            <button class="primary-button wide" type="submit">Guardar mi avance ✦</button>
-          </form>
-          <article class="panel report-panel"><div class="panel-head"><div><span class="mini-kicker">ÚLTIMOS 5 DÍAS</span><h3>Tu energía en movimiento</h3></div></div><div class="sales-chart" id="salesChart"></div><div class="report-totals" id="reportTotals"></div></article>
-        </div>
       </section>
 
       <section class="view" id="view-profile">
