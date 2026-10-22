@@ -201,13 +201,12 @@
             <button class="primary-button" data-open-contact>＋ Agregar persona</button>
           </div>
         </div>
-        <div class="contact-summary" id="contactSummary"></div>
         <article class="panel contacts-panel">
           <div class="contact-toolbar">
             <label class="search-box"><span>⌕</span><input id="contactSearch" type="search" placeholder="Buscar por nombre, etapa o nota..."></label>
             <label class="source-filter"><span class="sr-only">Filtrar por fuente</span><select id="sourceFilter"><option value="">Todas las fuentes</option></select></label>
             <div class="filter-tabs" role="tablist">
-              <button class="active" data-kind="">Todos</button><button data-kind="Prospecto">Prospectos</button><button data-kind="Cliente">Clientes</button><button data-kind="Asociado">Asociados</button>
+              <button class="active" data-kind="">Todos <b data-kind-count=""></b></button><button data-kind="Prospecto">Prospectos <b data-kind-count="Prospecto"></b></button><button data-kind="Cliente">Clientes <b data-kind-count="Cliente"></b></button><button data-kind="Asociado">Asociados <b data-kind-count="Asociado"></b></button>
             </div>
           </div>
           <div class="contact-table-wrap">

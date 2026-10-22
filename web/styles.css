@@ -753,3 +753,8 @@ button:disabled { opacity:.6; cursor:not-allowed; }
   .pending-btn { flex: 1 1 auto; min-width: 0; padding: 0 10px; white-space: nowrap; }
   .pending-btn.primary { flex-grow: 2; }
 }
+
+/* --- Mi red: totales dentro de las pestañas de filtro --- */
+.filter-tabs button b { margin-left: 3px; display: inline-grid; place-items: center; min-width: 18px; height: 16px; padding: 0 5px; border-radius: 8px; background: #e8eaf3; color: var(--navy-800); font-size: 9px; font-weight: 850; }
+.filter-tabs button.active b { background: var(--purple-soft); color: var(--purple); }
+.filter-tabs button b:empty { display: none; }

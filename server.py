@@ -2007,6 +2007,9 @@ class AppHandler(BaseHTTPRequestHandler):
                 cambios["next_action"] = next_action
             if next_action_date:
                 cambios["next_action_date"] = next_action_date
+            elif (contacto.get("next_action_date") or "").strip() and contacto["next_action_date"] <= followup_date:
+                # El seguimiento que tocaba ya se hizo y no se agendó otro: deja de ser pendiente.
+                cambios["next_action_date"] = ""
             db.execute(f"UPDATE contacts SET {','.join(f'{k}=?' for k in cambios)} WHERE id=? AND user_id=?",
                        list(cambios.values()) + [contact_id, self.user_id])
             db.execute("UPDATE users SET xp=xp+10 WHERE id=?", (self.user_id,))

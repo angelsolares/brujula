@@ -819,13 +819,12 @@ async function submitProfile(event) {
   });
 }
 
+// Los totales de la red van dentro de las pestañas de filtro para ahorrar pantalla.
 function renderContactSummary(counts) {
-  const items = [
-    ["Prospecto", "♙", counts.Prospecto || 0],
-    ["Cliente", "♡", counts.Cliente || 0],
-    ["Asociado", "♢", counts.Asociado || 0],
-  ];
-  $("#contactSummary").innerHTML = items.map(([kind, icon, count]) => `<article class="summary-card"><span style="background:${typeColors[kind]}15;color:${typeColors[kind]}">${icon}</span><div><strong>${count}</strong><small>${kind.toUpperCase()}${count === 1 ? "" : "S"}</small></div></article>`).join("");
+  const total = ["Prospecto", "Cliente", "Asociado"].reduce((suma, kind) => suma + (counts[kind] || 0), 0);
+  $$("[data-kind-count]").forEach((b) => {
+    b.textContent = b.dataset.kindCount ? counts[b.dataset.kindCount] || 0 : total;
+  });
 }
 
 function contactRow(contact) {
@@ -1476,11 +1475,11 @@ function setupAvisos() {
       if (ds.pendingFollowTask) {
         // Registrar el seguimiento con la persona deja la actividad como hecha.
         state.followupFromTask = { taskId: Number(ds.pendingFollowTask), contactId: Number(ds.contactId) };
-        leavePendingFor(() => openContactDialog(Number(ds.contactId), true));
+        leavePendingFor(() => { goToView("contacts"); openContactDialog(Number(ds.contactId), true); });
         return;
       }
       if (ds.pendingEdit) { leavePendingFor(() => openTaskDialog(Number(ds.pendingEdit))); return; }
-      if (ds.pendingContact) { leavePendingFor(() => openContactDialog(Number(ds.pendingContact), true)); }
+      if (ds.pendingContact) { leavePendingFor(() => { goToView("contacts"); openContactDialog(Number(ds.pendingContact), true); }); }
     });
   }
   // Al cerrar la ficha o la actividad abiertas desde los pendientes, volver a la ventana.
@@ -1526,9 +1525,13 @@ function renderFollowupTimeline(seguimientos) {
   $$("[data-followup-del]").forEach((b) => b.addEventListener("click", () => deleteFollowup(Number(b.dataset.followupDel))));
 }
 
+// Lo capturado en la ficha (los campos del seguimiento no tienen name y no cuentan).
+const fichaActual = () => JSON.stringify(Object.fromEntries(new FormData($("#contactForm"))));
+
 async function submitFollowup() {
   const contactId = state.editingContactId;
   if (!contactId) return;
+  const fichaSinCambios = state.contactSnapshot === fichaActual();
   const note = $("#followupNote").value.trim();
   const nextDate = $("#followupNextDate").value;
   const nextAction = $("#followupNextAction").value.trim();
@@ -1564,6 +1567,14 @@ async function submitFollowup() {
       } else {
         toast("Seguimiento registrado +10 XP", "success");
       }
+      // Si no se tocó nada más de la ficha, no hace falta "Guardar cambios": se cierra sola.
+      if (fichaSinCambios) {
+        cerrarFichaContacto();
+        await loadContacts();
+        return;
+      }
+      toast("Seguimiento registrado. Toca “Guardar cambios” para guardar lo que modificaste en la ficha.", "info");
+      state.contactSnapshot = null;
       await loadFollowups(contactId);
       await Promise.all([loadDashboard(), loadContacts()]);
     } catch (error) { toast(error.message, "error"); }
@@ -1851,6 +1862,7 @@ async function openContactDialog(contactId = null, focusFollowups = false) {
   } else {
     seccion.hidden = true;
   }
+  state.contactSnapshot = contact ? fichaActual() : null;
   $("#contactDialog").showModal();
   if (contact && focusFollowups) {
     requestAnimationFrame(() => seccion.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -1881,6 +1893,18 @@ function validarContacto(form, data) {
   return false;
 }
 
+// Cierra la ficha y deja Mi red a la vista (salvo en la Agenda, donde se estaba trabajando).
+function cerrarFichaContacto() {
+  const form = $("#contactForm");
+  $("#contactDialog").close();
+  form.reset();
+  limpiarErrores(form);
+  state.editingContactId = null;
+  state.contactSnapshot = null;
+  const vista = location.hash.replace("#", "");
+  if (vista !== "contacts" && vista !== "agenda") goToView("contacts");
+}
+
 async function submitContact(event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1894,10 +1918,7 @@ async function submitContact(event) {
         method: editing ? "PATCH" : "POST",
         body: JSON.stringify(data),
       });
-      $("#contactDialog").close();
-      form.reset();
-      limpiarErrores(form);
-      state.editingContactId = null;
+      cerrarFichaContacto();
       toast(editing ? "Contacto actualizado" : "¡Nueva persona en tu red! +25 XP", "success");
       if (!editing) celebrate(result.new_achievements);
       await Promise.all([loadDashboard(), loadContacts()]);
@@ -2159,9 +2180,9 @@ async function init() {
   setupAgenda();
   applyTodayLabels();
   restoreGuideChecklist();
-  // Sin una sección en la dirección, la app abre directo en Mi red.
-  const initialView = location.hash.replace("#", "");
-  goToView(viewTitles[initialView] ? initialView : "contacts");
+  // La app siempre abre en Mi red (aunque el navegador recuerde la última sección);
+  // la única excepción es la Agenda, que es a donde llevan los avisos del celular.
+  goToView(location.hash === "#agenda" ? "agenda" : "contacts");
   await loadAccount();
   await loadRanks();
   await Promise.all([loadDashboard(), loadMetrics(), showStorageMode()]);
