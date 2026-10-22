@@ -838,13 +838,14 @@ function contactRow(contact) {
     <td class="row-actions">
       <button class="row-action" data-advance-contact="${contact.id}" title="Avanzar etapa" aria-label="Avanzar etapa de ${escapeHtml(contact.name)}">→</button>
       <button class="row-action" data-edit-contact="${contact.id}" title="Editar" aria-label="Editar ${escapeHtml(contact.name)}">✎</button>
+      <button class="row-action" data-purchase-contact="${contact.id}" title="Registrar compra" aria-label="Registrar compra de ${escapeHtml(contact.name)}">🛒</button>
       <button class="row-action danger" data-delete-contact="${contact.id}" title="Eliminar" aria-label="Eliminar ${escapeHtml(contact.name)}">🗑</button>
     </td>
   </tr>`;
 }
 
 function mobileContactCard(contact) {
-  return `<article class="mobile-contact-card"><div class="person-top"><span class="person-avatar" style="color:${typeColors[contact.kind]};background:${typeColors[contact.kind]}16">${initials(contact.name)}</span><div><strong>${escapeHtml(contact.name)}</strong><span>${escapeHtml(contact.source)}</span></div></div><div class="mobile-contact-meta"><span class="type-pill type-${contact.kind}">${contact.kind}</span><span class="interest-pill interest-${contact.interest}">${contact.interest}</span><span class="stage-pill">${escapeHtml(contact.stage)}</span></div><p><strong>Siguiente:</strong> ${escapeHtml(contact.next_action || "Definir siguiente paso")} · ${shortDate(contact.next_action_date)}</p><div class="mobile-contact-actions"><button class="row-action" data-advance-contact="${contact.id}" title="Avanzar etapa">→</button><button class="row-action" data-edit-contact="${contact.id}" title="Editar">✎</button><button class="row-action danger" data-delete-contact="${contact.id}" title="Eliminar">🗑</button></div></article>`;
+  return `<article class="mobile-contact-card"><div class="person-top"><span class="person-avatar" style="color:${typeColors[contact.kind]};background:${typeColors[contact.kind]}16">${initials(contact.name)}</span><div><strong>${escapeHtml(contact.name)}</strong><span>${escapeHtml(contact.source)}</span></div></div><div class="mobile-contact-meta"><span class="type-pill type-${contact.kind}">${contact.kind}</span><span class="interest-pill interest-${contact.interest}">${contact.interest}</span><span class="stage-pill">${escapeHtml(contact.stage)}</span></div><p><strong>Siguiente:</strong> ${escapeHtml(contact.next_action || "Definir siguiente paso")} · ${shortDate(contact.next_action_date)}</p><div class="mobile-contact-actions"><button class="row-action" data-advance-contact="${contact.id}" title="Avanzar etapa">→</button><button class="row-action" data-edit-contact="${contact.id}" title="Editar">✎</button><button class="row-action" data-purchase-contact="${contact.id}" title="Registrar compra">🛒</button><button class="row-action danger" data-delete-contact="${contact.id}" title="Eliminar">🗑</button></div></article>`;
 }
 
 async function loadSourceFilter() {
@@ -876,6 +877,7 @@ async function loadContacts() {
     $("#mobileContactList").innerHTML = state.contacts.length ? state.contacts.map(mobileContactCard).join("") : `<p class="empty-state">No encontramos personas con esos filtros.</p>`;
     $$('[data-advance-contact]').forEach((button) => button.addEventListener("click", advanceContact));
     $$('[data-edit-contact]').forEach((button) => button.addEventListener("click", () => openContactDialog(Number(button.dataset.editContact))));
+    $$('[data-purchase-contact]').forEach((button) => button.addEventListener("click", () => openContactDialog(Number(button.dataset.purchaseContact), "compras")));
     $$('[data-delete-contact]').forEach((button) => button.addEventListener("click", () => deleteContact(Number(button.dataset.deleteContact))));
   } catch (error) {
     toast(error.message, "error");
@@ -1581,6 +1583,85 @@ async function submitFollowup() {
   });
 }
 
+// --- Compras de cada persona: se suman a las ventas -------------------------
+
+function limpiarFormularioCompra() {
+  $("#purchaseProduct").value = "";
+  $("#purchaseQty").value = 1;
+  $("#purchaseAmount").value = "";
+  $("#purchaseDate").value = isoDate();
+  $("#purchaseNote").value = "";
+}
+
+async function loadPurchases(contactId) {
+  const lista = $("#purchaseList");
+  lista.innerHTML = `<li class="followup-loading">Cargando compras…</li>`;
+  try {
+    renderPurchases(await api(`/api/contacts/${contactId}/purchases`));
+  } catch (error) {
+    lista.innerHTML = `<li class="followup-empty">No pude cargar las compras.</li>`;
+  }
+}
+
+function renderPurchases(data) {
+  $("#purchaseTotal").textContent = money.format(data.total || 0);
+  $("#purchaseProductList").innerHTML = [...new Set([...(data.products || []), "Immunocal", "Immunocal Platinum", "Immunocal Sport"])]
+    .map((p) => `<option value="${escapeHtml(p)}"></option>`).join("");
+  const lista = $("#purchaseList");
+  if (!data.purchases.length) {
+    lista.innerHTML = `<li class="followup-empty">Aún no hay compras registradas.</li>`;
+    return;
+  }
+  lista.innerHTML = data.purchases.map((c) => `
+    <li class="followup-entry purchase-entry">
+      <span class="followup-dot">🛒</span>
+      <div class="followup-entry-body">
+        <div class="followup-entry-head"><strong>${escapeHtml(c.product)}${c.quantity > 1 ? ` × ${c.quantity}` : ""}</strong><b class="purchase-amount">${money.format(c.amount)}</b></div>
+        <p><time>${shortDate(c.purchase_date)} · ${relativeDay(c.purchase_date)}</time>${c.note ? ` · ${escapeHtml(c.note)}` : ""}</p>
+      </div>
+      <button type="button" class="row-action danger" data-purchase-del="${c.id}" title="Eliminar compra">🗑</button>
+    </li>`).join("");
+  $$("[data-purchase-del]").forEach((b) => b.addEventListener("click", () => deletePurchase(Number(b.dataset.purchaseDel))));
+}
+
+async function submitPurchase() {
+  const contactId = state.editingContactId;
+  if (!contactId) return;
+  const product = $("#purchaseProduct").value.trim();
+  const amount = $("#purchaseAmount").value;
+  if (!product) { toast("Escribe qué producto compró.", "error"); $("#purchaseProduct").focus(); return; }
+  if (amount === "" || Number(amount) < 0) { toast("Escribe cuánto pagó (monto total en pesos).", "error"); $("#purchaseAmount").focus(); return; }
+  const payload = {
+    product,
+    quantity: Number($("#purchaseQty").value) || 1,
+    amount: Number(amount),
+    purchase_date: $("#purchaseDate").value || isoDate(),
+    note: $("#purchaseNote").value.trim(),
+  };
+  await withLoading($("#purchaseAddButton"), async () => {
+    try {
+      const result = await api(`/api/contacts/${contactId}/purchases`, { method: "POST", body: JSON.stringify(payload) });
+      renderPurchases(result);
+      limpiarFormularioCompra();
+      toast(`Compra registrada: ${money.format(payload.amount)} sumados a tus ventas +10 XP`, "success");
+      celebrate(result.new_achievements);
+      await loadDashboard();
+      if ($("#view-dashboard").classList.contains("active")) loadMetrics();
+    } catch (error) { toast(error.message, "error"); }
+  });
+}
+
+async function deletePurchase(purchaseId) {
+  const ok = await confirmar({ title: "Eliminar compra", message: "Se borra esta compra y se resta de tus ventas. Esta acción no se puede deshacer.", confirmText: "Sí, eliminar" });
+  if (!ok) return;
+  try {
+    await api(`/api/purchases/${purchaseId}`, { method: "DELETE" });
+    toast("Compra eliminada", "success");
+    if (state.editingContactId) await loadPurchases(state.editingContactId);
+    await loadDashboard();
+  } catch (error) { toast(error.message, "error"); }
+}
+
 async function deleteFollowup(followupId) {
   const ok = await confirmar({ title: "Eliminar seguimiento", message: "Se borra este registro del historial. Esta acción no se puede deshacer.", confirmText: "Sí, eliminar" });
   if (!ok) return;
@@ -1849,6 +1930,15 @@ async function openContactDialog(contactId = null, focusFollowups = false) {
   } else {
     form.elements.next_action_date.value = isoPlusDays(1);
   }
+  // Compras: igual que los seguimientos, solo en una persona ya guardada.
+  const compras = $("#contactPurchases");
+  compras.hidden = !contact;
+  if (contact) {
+    limpiarFormularioCompra();
+    $("#purchaseList").innerHTML = "";
+    $("#purchaseTotal").textContent = money.format(0);
+    loadPurchases(contact.id);
+  }
   // Sección de seguimientos: solo tiene sentido en una persona ya guardada.
   const seccion = $("#contactFollowups");
   if (contact) {
@@ -1865,19 +1955,25 @@ async function openContactDialog(contactId = null, focusFollowups = false) {
   state.contactSnapshot = contact ? fichaActual() : null;
   $("#contactDialog").showModal();
   if (contact && focusFollowups) {
-    requestAnimationFrame(() => seccion.scrollIntoView({ behavior: "smooth", block: "start" }));
+    const destino = focusFollowups === "compras" ? compras : seccion;
+    requestAnimationFrame(() => destino.scrollIntoView({ behavior: "smooth", block: "start" }));
+    if (focusFollowups === "compras") setTimeout(() => $("#purchaseProduct").focus({ preventScroll: true }), 400);
   }
 }
 
 async function loadMetrics() {
   try {
     state.metrics = await api("/api/metrics");
-    const latest = [...state.metrics].slice(0, 5).reverse();
+    const latest = [...state.metrics].slice(0, 5).reverse().map((item) => ({ ...item, sales: item.sales + (item.client_sales || 0) }));
     const maxSales = Math.max(...latest.map((item) => item.sales), 1);
     $("#salesChart").innerHTML = latest.map((item, index) => `<div class="chart-day ${index === latest.length - 1 ? "today" : ""}"><b>${money.format(item.sales)}</b><i class="chart-bar" style="--bar-height:${Math.max(8, Math.round((item.sales / maxSales) * 100))}%"></i><span>${shortDate(item.metric_date).split(" ")[0]}</span></div>`).join("");
     const totals = latest.reduce((acc, item) => ({ prospects: acc.prospects + item.new_prospects, presentations: acc.presentations + item.presentations, sales: acc.sales + item.sales }), { prospects: 0, presentations: 0, sales: 0 });
     $("#reportTotals").innerHTML = `<div class="report-total"><small>PROSPECTOS</small><strong>${totals.prospects}</strong></div><div class="report-total"><small>PRESENTACIONES</small><strong>${totals.presentations}</strong></div><div class="report-total"><small>VENTAS</small><strong>${money.format(totals.sales)}</strong></div>`;
     const todayEntry = state.metrics.find((item) => item.metric_date === isoDate());
+    const comprasHoy = todayEntry?.client_sales || 0;
+    $("#salesHint").innerHTML = comprasHoy
+      ? `Hoy ya llevas <b>${money.format(comprasHoy)}</b> en compras registradas en las fichas; esas se suman solas. Aquí anota solo las ventas que no registraste ahí.`
+      : "Las compras que registras en la ficha de cada persona se suman solas a tus ventas. Aquí anota solo las ventas que no registraste ahí.";
     if (todayEntry) Object.entries(todayEntry).forEach(([key, value]) => { const input = $(`#metricsForm [name="${key}"]`); if (input) input.value = value; });
   } catch (error) { toast(error.message); }
 }
@@ -2024,6 +2120,7 @@ function bindEvents() {
   $$('[data-close-modal]').forEach((button) => button.addEventListener("click", () => { state.editingContactId = null; $("#contactDialog").close(); }));
   $("#contactForm").addEventListener("submit", submitContact);
   $("#followupAddButton").addEventListener("click", submitFollowup);
+  $("#purchaseAddButton").addEventListener("click", submitPurchase);
   $("#metricsForm").addEventListener("submit", submitMetrics);
   $("#openTaskDialog").addEventListener("click", () => openTaskDialog());
   $$('[data-close-task]').forEach((button) => button.addEventListener("click", () => { state.editingTaskId = null; $("#taskDialog").close(); }));

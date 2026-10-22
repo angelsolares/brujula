@@ -472,6 +472,18 @@ CREATE TABLE IF NOT EXISTS testimonials (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )""",
     """
+CREATE TABLE IF NOT EXISTS purchases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  purchase_date TEXT NOT NULL,
+  product TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  amount REAL NOT NULL DEFAULT 0,
+  note TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)""",
+    """
 CREATE TABLE IF NOT EXISTS app_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL DEFAULT ''
@@ -732,7 +744,7 @@ def seed_demo_content(db, user_id: int) -> None:
     métricas, metas y desarrollo. Reemplaza lo que la cuenta tuviera, así que
     sirve tanto para sembrar una base nueva como para dejar presentable otra vez
     la cuenta de prueba."""
-    for tabla in ("followups", "tasks", "contacts", "daily_metrics", "goals", "development_items", "profile_scores"):
+    for tabla in ("followups", "purchases", "tasks", "contacts", "daily_metrics", "goals", "development_items", "profile_scores"):
         db.execute(f"DELETE FROM {tabla} WHERE user_id=?", (user_id,))
     # El nombre, el género y el avatar son de la persona: esos no se tocan.
     db.execute(
@@ -840,6 +852,24 @@ def compute_streak(db, user_id: int) -> int:
     return streak
 
 
+def client_sales(db, user_id: int, mes: str | None = None) -> float:
+    """Lo que suman las compras registradas en las fichas de las personas."""
+    if mes:
+        sql, params = "SELECT COALESCE(SUM(amount),0) FROM purchases WHERE user_id=? AND purchase_date LIKE ?", (user_id, mes)
+    else:
+        sql, params = "SELECT COALESCE(SUM(amount),0) FROM purchases WHERE user_id=?", (user_id,)
+    return float(db.execute(sql, params).fetchone()[0] or 0)
+
+
+def sales_total(db, user_id: int, mes: str | None = None) -> float:
+    """Ventas totales: lo anotado en el registro diario más las compras de clientes."""
+    if mes:
+        diario = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, mes)).fetchone()[0]
+    else:
+        diario = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE user_id=?", (user_id,)).fetchone()[0]
+    return float(diario or 0) + client_sales(db, user_id, mes)
+
+
 def achievement_stats(db, user_id: int) -> dict:
     user = fetch_one(db, "SELECT xp, purpose FROM users WHERE id=?", (user_id,)) or {}
     counts = {item["kind"]: item["count"] for item in rows(db.execute("SELECT kind,COUNT(*) count FROM contacts WHERE user_id=? GROUP BY kind", (user_id,)))}
@@ -850,7 +880,7 @@ def achievement_stats(db, user_id: int) -> dict:
         "associates": counts.get("Asociado", 0),
         "goals": db.execute("SELECT COUNT(*) FROM goals WHERE user_id=?", (user_id,)).fetchone()[0],
         "streak": compute_streak(db, user_id),
-        "sales": db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE user_id=?", (user_id,)).fetchone()[0],
+        "sales": sales_total(db, user_id),
         "month_vvp": db.execute("SELECT COALESCE(SUM(volume_points),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0],
         "month_orders": db.execute("SELECT COALESCE(SUM(client_orders),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0],
         "month_consultants": db.execute("SELECT COALESCE(SUM(new_associates),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0],
@@ -889,7 +919,7 @@ def evaluate_achievements(db, user_id: int) -> list[dict]:
 def sync_progress(db, user_id: int) -> list[dict]:
     """Recalcula racha y meta de ventas, y evalúa logros. Devuelve logros nuevos."""
     db.execute("UPDATE users SET streak=? WHERE id=?", (compute_streak(db, user_id), user_id))
-    month_sales = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0]
+    month_sales = sales_total(db, user_id, f"{today()[:7]}-%")
     db.execute("UPDATE goals SET current=? WHERE user_id=? AND unit='MXN'", (month_sales, user_id))
     return evaluate_achievements(db, user_id)
 
@@ -934,7 +964,7 @@ def compensation_snapshot(db, user_id: int) -> dict:
         "month_vvp": vvp,
         "month_orders": pedidos,
         "month_consultants": consultores,
-        "month_sales": float(totales.get("ventas") or 0),
+        "month_sales": float(totales.get("ventas") or 0) + client_sales(db, user_id, mes),
         "qualifying_clients": clientes_calificados,
         "qualifying_order_vp": QUALIFYING_ORDER_VP,
         "retail_margin": RETAIL_MARGIN,
@@ -1479,6 +1509,33 @@ def search_testimonials(db, query: str, limit: int = 60) -> dict:
             "query": query, "expansions": expansiones, "results": filas}
 
 
+def metrics_with_purchases(db, user_id: int, dias: int = 14) -> list[dict]:
+    """Últimos días con registro diario o con compras de clientes. client_sales va
+    aparte de sales para que el formulario del día no las vuelva a guardar."""
+    registros = {r["metric_date"]: r for r in rows(db.execute(
+        "SELECT * FROM daily_metrics WHERE user_id=? ORDER BY metric_date DESC LIMIT ?", (user_id, dias)))}
+    compras = {r["d"]: float(r["total"] or 0) for r in rows(db.execute(
+        """SELECT purchase_date d, SUM(amount) total FROM purchases WHERE user_id=?
+           GROUP BY purchase_date ORDER BY purchase_date DESC LIMIT ?""", (user_id, dias)))}
+    vacio = {"new_prospects": 0, "presentations": 0, "new_clients": 0, "new_associates": 0,
+             "sales": 0, "volume_points": 0, "client_orders": 0, "products_sold": ""}
+    resultado = []
+    for fecha in sorted(set(registros) | set(compras), reverse=True)[:dias]:
+        fila = dict(registros.get(fecha) or {**vacio, "metric_date": fecha})
+        fila["client_sales"] = compras.get(fecha, 0)
+        resultado.append(fila)
+    return resultado
+
+
+def purchases_payload(db, user_id: int, contact_id: int) -> dict:
+    compras = rows(db.execute(
+        "SELECT * FROM purchases WHERE contact_id=? AND user_id=? ORDER BY purchase_date DESC, id DESC",
+        (contact_id, user_id)))
+    productos = [r["product"] for r in rows(db.execute(
+        "SELECT product, COUNT(*) n FROM purchases WHERE user_id=? GROUP BY product ORDER BY n DESC LIMIT 20", (user_id,)))]
+    return {"purchases": compras, "total": sum(float(c["amount"] or 0) for c in compras), "products": productos}
+
+
 def agenda_range(db, user_id: int, desde: str, hasta: str) -> dict:
     """Actividades y seguimientos de contactos entre dos fechas, para la agenda
     por día, semana o mes."""
@@ -1548,7 +1605,7 @@ def dashboard_payload(db, user_id: int) -> dict:
     task_list = rows(db.execute("SELECT t.*, c.name AS contact_name FROM tasks t LEFT JOIN contacts c ON c.id=t.contact_id WHERE t.user_id=? AND t.due_date=? ORDER BY t.completed, t.due_time", (user_id, today())))
     contact_counts = {item["kind"]: item["count"] for item in rows(db.execute("SELECT kind,COUNT(*) count FROM contacts WHERE user_id=? GROUP BY kind", (user_id,)))}
     metrics = fetch_one(db, "SELECT * FROM daily_metrics WHERE user_id=? AND metric_date=?", (user_id, today())) or {}
-    sales_month = db.execute("SELECT COALESCE(SUM(sales),0) FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?", (user_id, f"{today()[:7]}-%")).fetchone()[0]
+    sales_month = sales_total(db, user_id, f"{today()[:7]}-%")
     month_totals = fetch_one(db, """SELECT COALESCE(SUM(new_prospects),0) prospects, COALESCE(SUM(new_clients),0) clients,
         COALESCE(SUM(new_associates),0) associates FROM daily_metrics WHERE user_id=? AND metric_date LIKE ?""", (user_id, f"{today()[:7]}-%")) or {}
     week_prospects = db.execute("SELECT COALESCE(SUM(new_prospects),0) FROM daily_metrics WHERE user_id=? AND metric_date>=?", (user_id, day_offset(-6))).fetchone()[0]
@@ -1687,6 +1744,8 @@ class AppHandler(BaseHTTPRequestHandler):
             self.create_contact()
         elif len(parts) == 4 and parts[:2] == ["api", "contacts"] and parts[3] == "followups":
             self.create_followup(self.parse_id(parts[2]))
+        elif len(parts) == 4 and parts[:2] == ["api", "contacts"] and parts[3] == "purchases":
+            self.create_purchase(self.parse_id(parts[2]))
         elif parsed.path == "/api/metrics":
             self.save_metrics()
         elif parsed.path == "/api/profile/scores":
@@ -1800,6 +1859,8 @@ class AppHandler(BaseHTTPRequestHandler):
             self.delete_record("tasks", self.parse_id(parts[2]), "Misión eliminada")
         elif len(parts) == 3 and parts[:2] == ["api", "followups"]:
             self.delete_record("followups", self.parse_id(parts[2]), "Seguimiento eliminado")
+        elif len(parts) == 3 and parts[:2] == ["api", "purchases"]:
+            self.delete_record("purchases", self.parse_id(parts[2]), "Compra eliminada")
         elif len(parts) == 3 and parts[:2] == ["api", "capture-sessions"]:
             self.delete_record("capture_sessions", self.parse_id(parts[2]), "Sesión de captura eliminada")
         else:
@@ -1815,6 +1876,9 @@ class AppHandler(BaseHTTPRequestHandler):
         parts = parsed.path.strip("/").split("/")
         if len(parts) == 4 and parts[:2] == ["api", "contacts"] and parts[3] == "followups":
             self.list_followups(self.parse_id(parts[2]))
+            return
+        if len(parts) == 4 and parts[:2] == ["api", "contacts"] and parts[3] == "purchases":
+            self.list_purchases(self.parse_id(parts[2]))
             return
         if len(parts) == 3 and parts[:2] == ["api", "contacts"]:
             self.get_contact(self.parse_id(parts[2]))
@@ -1900,7 +1964,7 @@ class AppHandler(BaseHTTPRequestHandler):
                     """SELECT COALESCE(NULLIF(TRIM(source),''),'Sin fuente') source, COUNT(*) count
                        FROM contacts WHERE user_id=? GROUP BY 1 ORDER BY count DESC, source""", (self.user_id,))))
             elif parsed.path == "/api/metrics":
-                self.send_json(rows(db.execute("SELECT * FROM daily_metrics WHERE user_id=? ORDER BY metric_date DESC LIMIT 14", (self.user_id,))))
+                self.send_json(metrics_with_purchases(db, self.user_id))
             else:
                 self.send_json({"error": "Ruta no encontrada"}, HTTPStatus.NOT_FOUND)
 
@@ -1982,6 +2046,41 @@ class AppHandler(BaseHTTPRequestHandler):
                 "SELECT * FROM followups WHERE contact_id=? AND user_id=? ORDER BY followup_date DESC, id DESC",
                 (contact_id, self.user_id))))
 
+    def list_purchases(self, contact_id: int | None) -> None:
+        if contact_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        with connect() as db:
+            if not fetch_one(db, "SELECT id FROM contacts WHERE id=? AND user_id=?", (contact_id, self.user_id)):
+                self.send_json({"error": "No encontrado"}, HTTPStatus.NOT_FOUND)
+                return
+            self.send_json(purchases_payload(db, self.user_id, contact_id))
+
+    def create_purchase(self, contact_id: int | None) -> None:
+        if contact_id is None:
+            self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
+            return
+        data = self.read_json()
+        with connect() as db:
+            if not fetch_one(db, "SELECT id FROM contacts WHERE id=? AND user_id=?", (contact_id, self.user_id)):
+                self.send_json({"error": "No encontrado"}, HTTPStatus.NOT_FOUND)
+                return
+            purchase_date = clean_date(data.get("purchase_date"), "La fecha de la compra") or today()
+            product = clean_text(data.get("product"), 120, "El producto", required=True)
+            quantity = int(clean_number(data.get("quantity") or 1, "La cantidad", 1, 999))
+            amount = clean_number(data.get("amount"), "El monto", 0, 10_000_000)
+            note = clean_text(data.get("note"), 300, "La nota de la compra")
+            db.execute(
+                "INSERT INTO purchases (user_id,contact_id,purchase_date,product,quantity,amount,note) VALUES (?,?,?,?,?,?,?)",
+                (self.user_id, contact_id, purchase_date, product, quantity, amount, note))
+            # Una compra también cuenta como contacto con la persona.
+            db.execute("UPDATE contacts SET last_contact=? WHERE id=? AND user_id=? AND COALESCE(last_contact,'') < ?",
+                       (purchase_date, contact_id, self.user_id, purchase_date))
+            db.execute("UPDATE users SET xp=xp+10 WHERE id=?", (self.user_id,))
+            nuevos = sync_progress(db, self.user_id)
+            payload = purchases_payload(db, self.user_id, contact_id)
+        self.send_json({**payload, "new_achievements": nuevos}, HTTPStatus.CREATED)
+
     def create_followup(self, contact_id: int | None) -> None:
         if contact_id is None:
             self.send_json({"error": "Identificador inválido"}, HTTPStatus.BAD_REQUEST)
@@ -2030,6 +2129,7 @@ class AppHandler(BaseHTTPRequestHandler):
             # el historial de seguimientos para no dejar registros huérfanos.
             if table == "contacts":
                 db.execute("DELETE FROM followups WHERE contact_id=? AND user_id=?", (record_id, self.user_id))
+                db.execute("DELETE FROM purchases WHERE contact_id=? AND user_id=?", (record_id, self.user_id))
             db.execute(f"DELETE FROM {table} WHERE id=? AND user_id=?", (record_id, self.user_id))
         self.send_json({"ok": True, "message": message})
 
@@ -2242,7 +2342,7 @@ class AppHandler(BaseHTTPRequestHandler):
                    "account": self.account["email"], "data": {}}
         payload["data"]["users"] = rows(db.execute("SELECT * FROM users WHERE id=?", (self.user_id,)))
         for table in ("profile_scores", "contacts", "tasks", "daily_metrics", "goals", "achievements",
-                      "development_items", "capture_sessions"):
+                      "development_items", "capture_sessions", "followups", "purchases"):
             payload["data"][table] = rows(db.execute(f"SELECT * FROM {table} WHERE user_id=?", (self.user_id,)))
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(HTTPStatus.OK)

@@ -162,6 +162,7 @@
               <label><span>Asociados nuevos</span><input name="new_associates" type="number" min="0" value="0"><small>socios</small></label>
             </div>
             <label class="money-field"><span>¿Cuánto vendí?</span><div><b>$</b><input name="sales" type="number" min="0" step="100" value="0"><small>MXN</small></div></label>
+            <p class="sales-hint" id="salesHint">Las compras que registras en la ficha de cada persona se suman solas a tus ventas. Aquí anota solo las ventas que no registraste ahí.</p>
             <div class="number-grid">
               <label><span>Puntos de volumen (VVP)</span><input name="volume_points" type="number" min="0" step="10" value="0"><small>cuentan para tu rango</small></label>
               <label><span>Pedidos de cliente de 400+ VP</span><input name="client_orders" type="number" min="0" step="1" value="0"><small>cuentan para el bono</small></label>
@@ -610,6 +611,25 @@
         <label class="span-2"><span>Perfil de salud / interés</span><input name="health_profile" placeholder="¿Qué necesita o qué desea lograr?"></label>
         <label class="span-2"><span>Próxima acción</span><input name="next_action" placeholder="Ej. Enviar testimonio y agendar café"></label>
         <label class="span-2"><span>Notas</span><textarea name="notes" rows="3" placeholder="Detalles que te ayudarán a conectar mejor..."></textarea></label>
+      </div>
+
+      <div class="followup-section purchase-section" id="contactPurchases" hidden>
+        <div class="followup-head purchase-head">
+          <div><span class="mini-kicker">COMPRAS</span><h3>Lo que ha comprado</h3><p>Cada compra se suma sola a tus ventas del mes.</p></div>
+          <div class="purchase-total"><small>TOTAL COMPRADO</small><strong id="purchaseTotal">$0</strong></div>
+        </div>
+        <div class="followup-logger">
+          <div class="followup-logger-grid">
+            <label class="span-2"><span>Producto</span><input id="purchaseProduct" list="purchaseProductList" maxlength="120" placeholder="Ej. Immunocal Platinum"></label>
+            <label><span>Cantidad</span><input id="purchaseQty" type="number" min="1" max="999" step="1" value="1"></label>
+            <label><span>Monto total (MXN)</span><input id="purchaseAmount" type="number" min="0" step="any" inputmode="decimal" placeholder="0"></label>
+            <label><span>Fecha</span><input id="purchaseDate" type="date"></label>
+            <label><span>Nota (opcional)</span><input id="purchaseNote" maxlength="300" placeholder="Ej. Pagó con transferencia"></label>
+          </div>
+          <datalist id="purchaseProductList"></datalist>
+          <div class="followup-logger-actions"><button type="button" class="primary-button" id="purchaseAddButton">Registrar compra +10 XP</button></div>
+        </div>
+        <ol class="followup-timeline" id="purchaseList"></ol>
       </div>
 
       <div class="followup-section" id="contactFollowups" hidden>
