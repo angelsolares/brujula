@@ -720,6 +720,7 @@ def initialize_database() -> None:
         ensure_column(db, "daily_metrics", "client_orders", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(db, "contacts", "volume_points", "REAL NOT NULL DEFAULT 0")
         ensure_column(db, "contacts", "capture_session_id", "INTEGER")
+        ensure_column(db, "contacts", "next_action_time", "TEXT DEFAULT ''")
         ensure_column(db, "testimonials", "title_text", "TEXT NOT NULL DEFAULT ''")
         migrate_multiuser(db)
         db.execute("DELETE FROM sessions WHERE expires_at < ?", (datetime.now().isoformat(timespec="seconds"),))
@@ -1545,9 +1546,9 @@ def agenda_range(db, user_id: int, desde: str, hasta: str) -> dict:
            ORDER BY t.due_date, COALESCE(NULLIF(t.due_time,''),'99:99'), t.id""",
         (user_id, desde, hasta)))
     seguimientos = rows(db.execute(
-        """SELECT id, name, kind, stage, next_action, next_action_date FROM contacts
+        """SELECT id, name, kind, stage, next_action, next_action_date, next_action_time FROM contacts
            WHERE user_id=? AND next_action_date BETWEEN ? AND ?
-           ORDER BY next_action_date, name""",
+           ORDER BY next_action_date, COALESCE(NULLIF(next_action_time,''),'99:99'), name""",
         (user_id, desde, hasta)))
     return {"from": desde, "to": hasta, "tasks": tareas, "followups": seguimientos}
 
@@ -1558,10 +1559,10 @@ def followup_alerts(db, user_id: int, upcoming_days: int = 7) -> dict:
     hoy = today()
     limite = day_offset(upcoming_days)
     personas = rows(db.execute(
-        """SELECT id, name, kind, interest, stage, phone, next_action, next_action_date, last_contact
+        """SELECT id, name, kind, interest, stage, phone, next_action, next_action_date, next_action_time, last_contact
            FROM contacts
            WHERE user_id=? AND COALESCE(TRIM(next_action_date),'') <> ''
-           ORDER BY next_action_date, CASE interest WHEN 'Alto' THEN 1 WHEN 'Medio' THEN 2 ELSE 3 END""",
+           ORDER BY next_action_date, COALESCE(NULLIF(next_action_time,''),'99:99'), CASE interest WHEN 'Alto' THEN 1 WHEN 'Medio' THEN 2 ELSE 3 END""",
         (user_id,)))
     overdue, due_today, upcoming = [], [], []
     for persona in personas:
@@ -1985,6 +1986,9 @@ class AppHandler(BaseHTTPRequestHandler):
             "volume_points": clean_number(data.get("volume_points"), "Los puntos de volumen", 0, 1_000_000),
             "next_action": clean_text(data.get("next_action"), 300, "La próxima acción"),
             "next_action_date": clean_date(data.get("next_action_date"), "La próxima fecha"),
+            # La hora solo tiene sentido con fecha: sin fecha no se agenda nada.
+            "next_action_time": (clean_time(data.get("next_action_time"), "La hora del próximo paso") or "")
+                                if data.get("next_action_date") else "",
             "last_contact": clean_date(data.get("last_contact"), "La fecha del último contacto"),
             "birthday": clean_date(data.get("birthday"), "El cumpleaños"),
             "notes": clean_text(data.get("notes"), 1000, "El campo de notas"),
@@ -2096,6 +2100,7 @@ class AppHandler(BaseHTTPRequestHandler):
             note = clean_text(data.get("note"), 1000, "La nota del seguimiento")
             next_action = clean_text(data.get("next_action"), 300, "La próxima acción")
             next_action_date = clean_date(data.get("next_action_date"), "La próxima fecha")
+            next_action_time = clean_time(data.get("next_action_time"), "La hora del siguiente paso") or ""
             cursor = db.execute(
                 "INSERT INTO followups (user_id,contact_id,followup_date,channel,note) VALUES (?,?,?,?,?)",
                 (self.user_id, contact_id, followup_date, channel, note))
@@ -2106,9 +2111,11 @@ class AppHandler(BaseHTTPRequestHandler):
                 cambios["next_action"] = next_action
             if next_action_date:
                 cambios["next_action_date"] = next_action_date
+                cambios["next_action_time"] = next_action_time
             elif (contacto.get("next_action_date") or "").strip() and contacto["next_action_date"] <= followup_date:
                 # El seguimiento que tocaba ya se hizo y no se agendó otro: deja de ser pendiente.
                 cambios["next_action_date"] = ""
+                cambios["next_action_time"] = ""
             db.execute(f"UPDATE contacts SET {','.join(f'{k}=?' for k in cambios)} WHERE id=? AND user_id=?",
                        list(cambios.values()) + [contact_id, self.user_id])
             db.execute("UPDATE users SET xp=xp+10 WHERE id=?", (self.user_id,))

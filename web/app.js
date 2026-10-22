@@ -976,7 +976,7 @@ function refreshAgendaIfVisible() {
 
 const agendaFollowupItem = (p) => `<li class="pending-item">
     <span class="pending-icon">☎</span>
-    <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.next_action || "Definir siguiente paso")}</small></div>
+    <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml([p.next_action_time ? horaLegible(p.next_action_time) : "", p.next_action || "Definir siguiente paso"].filter(Boolean).join(" · "))}</small></div>
     <div class="pending-actions"><button type="button" class="pending-btn primary" data-agenda-contact="${p.id}">Registrar seguimiento</button></div>
   </li>`;
 
@@ -1001,7 +1001,7 @@ function renderAgendaDay(data, fecha) {
 }
 
 const chipTarea = (t) => `<button type="button" class="agenda-chip chip-task${t.completed ? " is-done" : ""}${!t.completed && t.due_date < isoDate() ? " is-overdue" : ""}" data-agenda-task="${t.id}" title="${escapeHtml(t.title)}"><b>${escapeHtml(t.due_time ? horaLegible(t.due_time) : "·")}</b> ${escapeHtml(t.title)}</button>`;
-const chipSeguimiento = (p) => `<button type="button" class="agenda-chip chip-followup" data-agenda-contact="${p.id}" title="Seguimiento con ${escapeHtml(p.name)}">☎ ${escapeHtml(p.name)}</button>`;
+const chipSeguimiento = (p) => `<button type="button" class="agenda-chip chip-followup" data-agenda-contact="${p.id}" title="Seguimiento con ${escapeHtml(p.name)}${p.next_action ? `: ${escapeHtml(p.next_action)}` : ""}">${p.next_action_time ? `<b>${escapeHtml(horaLegible(p.next_action_time))}</b> ` : "☎ "}${escapeHtml(p.name)}</button>`;
 
 function renderAgendaWeek(data, rango) {
   const hoy = isoDate();
@@ -1289,7 +1289,7 @@ function pendingFollowupItem(p) {
   const atrasado = p.bucket === "overdue";
   return `<li class="pending-item${atrasado ? " is-overdue" : ""}">
     <span class="pending-icon">${atrasado ? "⏰" : "☎"}</span>
-    <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(`${p.next_action || "Definir siguiente paso"} · ${relativeDay(p.next_action_date)}`)}</small></div>
+    <div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(`${p.next_action || "Definir siguiente paso"} · ${relativeDay(p.next_action_date)}${p.next_action_time ? ` a las ${horaLegible(p.next_action_time)}` : ""}`)}</small></div>
     <div class="pending-actions">
       <button type="button" class="pending-btn primary" data-pending-contact="${p.id}">Dar seguimiento</button>
       <button type="button" class="pending-btn" data-pending-postpone-contact="${p.id}" title="Pasar este seguimiento a mañana">Mañana</button>
@@ -1338,7 +1338,12 @@ function marcarRecordado(clave) {
 
 // Recordatorio a la hora: 10 minutos antes (o al abrir, si ya empezó hace menos de una hora).
 function checkTaskReminders() {
-  const tareas = (state.alerts?.tasks_today || []).filter((t) => t.due_time);
+  const tareas = [
+    ...(state.alerts?.tasks_today || []).filter((t) => t.due_time),
+    // Seguimientos de hoy con hora: se recuerdan igual que las actividades.
+    ...(state.alerts?.today || []).filter((p) => p.next_action_time)
+      .map((p) => ({ ...p, esSeguimiento: true, due_time: p.next_action_time, title: `Seguimiento con ${p.name}`, detail: p.next_action })),
+  ];
   if (!tareas.length) return;
   // No interrumpir otra ventana (pendientes, editar un contacto…): se avisa en la siguiente revisión.
   const abierta = document.querySelector("dialog[open]");
@@ -1352,7 +1357,7 @@ function checkTaskReminders() {
     const hora = new Date(ahora);
     hora.setHours(h, m || 0, 0, 0);
     const minutos = (hora - ahora) / 60000;
-    const clave = `${t.id}:${hoy}:${t.due_time}`;
+    const clave = `${t.esSeguimiento ? "c" : ""}${t.id}:${hoy}:${t.due_time}`;
     if (minutos <= AVISO_ANTICIPO_MIN && minutos > -60 && !yaRecordadas[clave]) tocan.push({ ...t, minutos, clave });
   }
   if (!tocan.length) return;
@@ -1361,7 +1366,7 @@ function checkTaskReminders() {
   for (const t of tocan) {
     const cuando = t.minutos > 1 ? `En ${Math.round(t.minutos)} minutos` : t.minutos >= -1 ? "Es hora" : `Era a las ${horaLegible(t.due_time)}`;
     const cuerpo = [t.detail, t.contact_name ? `Con ${t.contact_name}` : ""].filter(Boolean).join(" · ") || "Abre tu agenda en BRÚJULA.";
-    systemNotify(`${cuando}: ${t.title}`, cuerpo, { tag: `brujula-tarea-${t.id}`, url: "/#agenda" });
+    systemNotify(`${cuando}: ${t.title}`, cuerpo, { tag: `brujula-${t.esSeguimiento ? "seguimiento" : "tarea"}-${t.id}`, url: "/#agenda" });
   }
 }
 
@@ -1372,7 +1377,7 @@ function showReminder(tareas) {
   const titulo = tareas.length > 1 ? `${tareas.length} actividades por empezar`
     : primera.minutos > 1 ? `En ${Math.round(primera.minutos)} minutos`
     : primera.minutos >= -1 ? "Es hora de tu actividad" : "Tienes una actividad en curso";
-  const items = tareas.map(pendingTaskItem).join("");
+  const items = tareas.map((t) => (t.esSeguimiento ? pendingFollowupItem(t) : pendingTaskItem(t))).join("");
   const lista = $("#reminderList");
   if (dlg.open) {
     lista.insertAdjacentHTML("beforeend", items);
@@ -1544,6 +1549,7 @@ async function submitFollowup() {
     note,
     next_action: nextAction,
     next_action_date: nextDate || "",
+    next_action_time: nextDate ? $("#followupNextTime").value : "",
   };
   await withLoading($("#followupAddButton"), async () => {
     try {
@@ -1551,10 +1557,12 @@ async function submitFollowup() {
       $("#followupNote").value = "";
       $("#followupNextAction").value = "";
       $("#followupNextDate").value = "";
+      $("#followupNextTime").value = "";
       // Reflejar en la ficha abierta el nuevo "próximo paso" por si se agendó.
       if (result.contact) {
         if ($("#contactForm").elements.next_action) $("#contactForm").elements.next_action.value = result.contact.next_action || "";
         if ($("#contactForm").elements.next_action_date) $("#contactForm").elements.next_action_date.value = result.contact.next_action_date || "";
+        if ($("#contactForm").elements.next_action_time) $("#contactForm").elements.next_action_time.value = result.contact.next_action_time || "";
       }
       // Si se llegó desde una actividad de la agenda con esta persona, queda como hecha.
       const desdeActividad = state.followupFromTask;
@@ -1924,7 +1932,7 @@ async function openContactDialog(contactId = null, focusFollowups = false) {
     if (fuente && ![...select.options].some((option) => option.value === fuente)) {
       select.add(new Option(fuente, fuente));
     }
-    ["name", "kind", "interest", "stage", "source", "phone", "email", "next_action_date", "birthday", "monthly_consumption", "volume_points", "health_profile", "next_action", "notes"].forEach((key) => {
+    ["name", "kind", "interest", "stage", "source", "phone", "email", "next_action_date", "next_action_time", "birthday", "monthly_consumption", "volume_points", "health_profile", "next_action", "notes"].forEach((key) => {
       if (form.elements[key]) form.elements[key].value = contact[key] ?? "";
     });
   } else {
@@ -1947,6 +1955,7 @@ async function openContactDialog(contactId = null, focusFollowups = false) {
     $("#followupNote").value = "";
     $("#followupNextAction").value = "";
     $("#followupNextDate").value = "";
+    $("#followupNextTime").value = "";
     $("#followupTimeline").innerHTML = "";
     loadFollowups(contact.id);
   } else {

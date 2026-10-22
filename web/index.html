@@ -604,12 +604,17 @@
         <label><span>Fuente</span><select name="source"><option>En persona</option><option>Referido</option><option>Facebook</option><option>Instagram</option><option>WhatsApp</option><option>Evento</option><option>Café virtual</option><option>Registro por QR</option></select></label>
         <label><span>Teléfono</span><input name="phone" type="tel" maxlength="40" placeholder="656 000 0000"></label>
         <label><span>Correo</span><input name="email" type="email" maxlength="160" placeholder="nombre@correo.com"></label>
-        <label><span>Próxima fecha</span><input name="next_action_date" type="date"></label>
         <label><span>Cumpleaños</span><input name="birthday" type="date"></label>
         <label><span>Consumo mensual (MXN)</span><input name="monthly_consumption" type="number" min="0" step="100" placeholder="0"></label>
         <label><span>Puntos de volumen (VP)</span><input name="volume_points" type="number" min="0" step="10" placeholder="0"><small>400+ VP califica para el bono</small></label>
         <label class="span-2"><span>Perfil de salud / interés</span><input name="health_profile" placeholder="¿Qué necesita o qué desea lograr?"></label>
-        <label class="span-2"><span>Próxima acción</span><input name="next_action" placeholder="Ej. Enviar testimonio y agendar café"></label>
+        <fieldset class="span-2 next-step-box">
+          <legend>📅 Próximo paso <small>se agenda en tu Agenda</small></legend>
+          <label class="next-step-action"><span>¿Qué vas a hacer?</span><input name="next_action" maxlength="300" placeholder="Ej. Platicar con ella, enviar testimonio…"></label>
+          <label><span>Fecha</span><input name="next_action_date" type="date"></label>
+          <label><span>Hora (opcional)</span><input name="next_action_time" type="time"></label>
+          <p class="next-step-hint">Ese día aparece en tu Agenda y en tus pendientes; si pones hora, te avisamos 10 minutos antes.</p>
+        </fieldset>
         <label class="span-2"><span>Notas</span><textarea name="notes" rows="3" placeholder="Detalles que te ayudarán a conectar mejor..."></textarea></label>
       </div>
 
@@ -640,6 +645,7 @@
             <label><span>Cómo fue</span><select id="followupChannel"><option>Llamada</option><option>Mensaje</option><option>WhatsApp</option><option>Reunión</option><option>Café</option><option>Correo</option><option>Evento</option><option>Otro</option></select></label>
             <label class="span-2"><span>¿Qué pasó?</span><input id="followupNote" maxlength="1000" placeholder="Ej. Le envié el testimonio; quedó de contarme el viernes."></label>
             <label><span>Agendar siguiente</span><input id="followupNextDate" type="date"></label>
+            <label><span>Hora (opcional)</span><input id="followupNextTime" type="time"></label>
             <label class="span-2"><span>Siguiente acción</span><input id="followupNextAction" maxlength="300" placeholder="Ej. Llamar para confirmar su recompra"></label>
           </div>
           <div class="followup-logger-actions"><button type="button" class="primary-button" id="followupAddButton">Registrar seguimiento +10 XP</button></div>
